@@ -39,7 +39,8 @@ def data_matrix_demo(cap):
         if not ret:
             break
 
-        imr = cv2.resize(frame, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_CUBIC)
+        # Geen resize meer - gebruik origineel frame
+        imr = frame.copy()
         imdecode = imr.copy()
 
         # Get center coordinates
@@ -47,9 +48,9 @@ def data_matrix_demo(cap):
         center_x = width // 2
         center_y = height // 2
 
-        # ROI size (smaller)
-        roi_width = 80
-        roi_height = 40
+        # ROI size
+        roi_width = 160
+        roi_height = 80
 
         try:
             # ROI area in center
@@ -58,22 +59,15 @@ def data_matrix_demo(cap):
             y1 = center_y - roi_height // 2
             y2 = center_y + roi_height // 2
 
-            roi = imr[y1:y2, x1:x2]
-            means = cv2.mean(roi)
-            mean_value = int(means[0])
-
             # Drawing for visualization
-            cv2.rectangle(imr, (x1, y1), (x2, y2), (255, 255, 255), 1)
-            cv2.line(imr, (center_x, y1 - 10), (center_x, y2 + 10), (0, 0, 255), 1)
-            cv2.line(imr, (x1 - 10, center_y), (x2 + 10, center_y), (0, 0, 255), 1)
-            cv2.putText(imr, str(mean_value), (center_x - 30, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, .4, (255, 0, 0), 1)
+            cv2.rectangle(imr, (x1, y1), (x2, y2), (255, 255, 255), 2)
+            cv2.line(imr, (center_x, y1 - 20), (center_x, y2 + 20), (0, 0, 255), 2)
+            cv2.line(imr, (x1 - 20, center_y), (x2 + 20, center_y), (0, 0, 255), 2)
 
-            # Condition for triggering decode - start decode in separate thread
-            if 100 < mean_value < 190:
-                # Start decode every 0.3 seconds to avoid too many threads
-                if time.time() - last_decode_time > 0.3:
-                    threading.Thread(target=decode_thread, args=(imdecode.copy(),), daemon=True).start()
-                    last_decode_time = time.time()
+            # Scan altijd (geen helderheidscheck meer)
+            if time.time() - last_decode_time > 0.3:
+                threading.Thread(target=decode_thread, args=(imdecode.copy(),), daemon=True).start()
+                last_decode_time = time.time()
 
             # Check if we have decode results
             with decode_lock:
@@ -86,11 +80,11 @@ def data_matrix_demo(cap):
 
                         # draw rectangle
                         x, y, w, h = points
-                        cv2.rectangle(imr, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                        cv2.rectangle(imr, (x, y), (x + w, y + h), (0, 255, 0), 3)
 
                         # print code on screen
-                        cv2.putText(imr, last_code, (x, y - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 255, 0), 1)
+                        cv2.putText(imr, last_code, (x, y - 20),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
         except Exception as e:
             print("Processing error:", e)
@@ -99,9 +93,9 @@ def data_matrix_demo(cap):
         e2 = cv2.getTickCount()
         t = (e2 - e1) / cv2.getTickFrequency()
         fps = int(1 / t) if t > 0 else 0
-        cv2.rectangle(imr, (0, 0), (110, 14), (0, 0, 0), -1)
-        cv2.putText(imr, f"{t:.3f}s {fps}fps", (1, 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, .4, (0, 250, 0), 1)
+        cv2.rectangle(imr, (0, 0), (150, 30), (0, 0, 0), -1)
+        cv2.putText(imr, f"{t:.3f}s {fps}fps", (5, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, .6, (0, 250, 0), 2)
 
         cv2.imshow(window_name, imr)
         key = cv2.waitKey(1)
