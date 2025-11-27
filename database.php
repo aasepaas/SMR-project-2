@@ -8,7 +8,7 @@ class DatabaseConfig
     public static $wachtwoord = "your_password";
     public static $databasenaam = "your_database";
 
-    public $iterator = 0;
+    public $iterator = 1;
     public $conn;
 
     function __construct($server, $gebr, $ww, $db)
@@ -30,34 +30,40 @@ class DatabaseConfig
         }
         return $conn;
     }
-    public function checkID($protectorID)
-    {
-        $dbid = $this->getID("protectors");
-        if (!$dbid == null) {
-            if ($protectorID == $dbid) {
-                return true;
-            } else {
-                return false;
-            }
-        } else {
-            return false;
-        }
 
-    }
-    public function getID($table)
+    public function determineMatchingId($boxid)
     {
-        $sqlq = $this->conn->prepare("SELECT NUMBÈR, ID FROM $table WHERE NUMBER = ?");
-
-        $sqlq->bind_param("i", $this->iterator);
+        $sqlq = $this->conn->prepare("SELECT * FROM `premium-wallet` WHERE `BoxID` = ?");
+        $sqlq->bind_param("s", $boxid);
         $sqlq->execute();
         $result = $sqlq->get_result();
         if ($result->num_rows > 0) {
-            while ($row = $result->fetch_assoc()) {
+            if ($row = $result->fetch_assoc()) {
                 return $row["ID"];
             }
         } else {
             return null;
         }
+        }
+    public function checkID($boxid, $id)
+    {
+        $dbid = $this->determineMatchingId($boxid);
+        if ($dbid == null) {
+            return false;
+        } elseif ($dbid == $id) {
+            return true;
+        } else {
+            return false;
+        }
+        
+
+
     }
+    public function closeConnection()
+    {
+        $this->conn->close();
+    }
+
 }
+
    ?>
