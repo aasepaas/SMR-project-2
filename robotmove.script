@@ -1,0 +1,67 @@
+#positions 
+home = p[0.0, -0.5, 0.5, 0, 3.14, 0]
+lowerz = p[0.2, -0.3, 0.1, 0, 3.14, 0]
+raisez = p[0.2, -0.3, 0.4, 0, 3.14, 0]  
+openerpos = p[0.5, 0.0, 0.3, 0, 3.14, 0]
+scannerpos = p[0.0, 0.5, 0.3, 0, 3.14, 0]
+endpos = p[0.0, 0.6, 0.3, 0, 3.14, 0]
+failurepos = p[0.0, 0.4, 0.3, 0, 3.14, 0]
+
+coords = socket_read_string("socket1", timeout=0)
+
+
+def moveto_target_coords(coords):
+  movel(coords, a=1.2, v=0.25)
+  movel(lowerz, a=1.2, v=0.25)
+  set_standard_digital_out(0, True)  # Activate vacuum
+  movel(raisez, a=1.2, v=0.25)
+  sleep(1)
+  set_standard_digital_out(1, True)  # activate gripper
+  sleep(1)
+  set_standard_digital_out(0, False)  # deactivate vacuum
+end 
+
+def moveto_home():
+  movel(home, a=1.2, v=0.5)
+end 
+
+def moveto_opener(failstate):
+    movel(openerpos, a=1.2, v=0.5)
+    if (get_standard_digital_out(2) == True):
+        set_standard_digital_out(2, False)  # deactivate motor
+        sleep(1000)
+    movel(lowerz, a=1.2, v=0.25)
+    if (failstate == False):
+        set_standard_digital_out(1, True)  # activate gripper
+        sleep(1)
+        movel(raisez, a=1.2, v=0.25)
+        movel(faulurepos, a=1.2, v=0.5)
+        set_standard_digital_out(1, False)  # deactivate gripper
+        sleep(1)
+    else:
+    set_standard_digital_out(1, False)  # deactivate gripper
+    sleep(1)
+    movel(raisez, a=1.2, v=0.25)
+    set_standard_digital_out(2, True)  # activate motor
+    sleep(2)
+end
+
+def moveto_scanner():
+    movel(scannerpos, a=1.2, v=0.5)
+    message = socket_send_string("socket1", "scan")
+    correct = socket_read_string("socket1", timeout=0)
+    if (correct == "yes"):
+        textmsg("Scan successful")
+        movel(endpos, a=1.2, v=0.5)
+    else:
+        textmsg("Scan failed, moving to failure position")
+        movel(failurepos, a=1.2, v=0.5)
+        moveto_opener(True)
+end
+
+
+
+
+
+
+
