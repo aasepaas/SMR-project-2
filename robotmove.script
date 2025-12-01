@@ -7,9 +7,10 @@ scannerpos = p[0.0, 0.5, 0.3, 0, 3.14, 0]
 endpos = p[0.0, 0.6, 0.3, 0, 3.14, 0]
 failurepos = p[0.0, 0.4, 0.3, 0, 3.14, 0]
 
-coords = socket_read_string("socket1", timeout=0)
+#coords = socket_read_string("socket1", timeout=0)
 
 
+#pickup step 
 def moveto_target_coords(coords):
   movel(coords, a=1.2, v=0.25)
   movel(lowerz, a=1.2, v=0.25)
@@ -60,8 +61,107 @@ def moveto_scanner():
 end
 
 
+##new code
+def parse_pose_string(pose_str):
+  # fallback: als string None of te kort
+  if pose_str == None:
+    textmsg("empty pose string")
+    return None
+  
+  # split string op spaties
+  parts = split(pose_str, " ")
+  
+  if size(parts) != 6:
+    textmsg("Invalid pose string, expected 6 values")
+    return None
+
+  # convert naar float
+  x = to_float(parts[0])
+  y = to_float(parts[1])
+  z = to_float(parts[2])
+  rx = to_float(parts[3])
+  ry = to_float(parts[4])
+  rz = to_float(parts[5])
+
+  return p[x, y, z, rx, ry, rz]
+end
 
 
+def main():
+  #change ip and port as needed
+  socket_open("127.0.0.1", 12344, "socket1")
+  textmsg("Socket opened - starting sequence")
+  recv = socket_read_string("socket1", timeout=10000) # wacht tot 10s
 
 
+  # request giftbox coords from server/lapopt
+  socket_send_string("socket1", "boxCoords")
+  textmsg("Requested boxCoords")
+  coords_str = socket_read_string("socket1", timeout=10000) # wacht tot 10s
+  if coords_str == None:
+    textmsg("No coords received for box - abort")
+    socket_close("socket1")
+    return
+  textmsg("Received box coords: " + coords_str)
 
+  # parse en verplaats naar box en dan scanner positie
+  box_pose = parse_coords_to_pose(coords_str)
+  moveto_target_coords(box_pose)
+  moveto_scanner()
+
+  # 2) vraag server te scannen
+  socket_send_string("socket1", "startScan")
+  textmsg("Sent startScan, waiting for boxFound")
+  scan_reply = socket_read_string("socket1", timeout=30000) # scan kan even duren
+  if scan_reply == None:
+    textmsg("No reply after startScan - abort")
+    socket_close("socket1")
+    return
+  textmsg("Received scan reply: " + scan_reply)
+  # Als server 'boxFound' terugstuurt, ga verder; anders probeer fallback
+  if scan_reply == "boxFound":
+    textmsg("Box found - continue")
+  else:
+    textmsg("Unexpected reply to startScan: " + scan_reply)
+  
+  moveto_opener()
+
+  # 3) Vraag wallet coords
+  socket_send_string("socket1", "walletCoords")
+  textmsg("Requested walletCoords")
+  wallet_coords_str = socket_read_string("socket1", timeout=10000)
+  if wallet_coords_str == None:
+    textmsg("No wallet coords received - abort")
+    socket_close("socket1")
+    return
+  textmsg("Received wallet coords: " + wallet_coords_str)
+  wallet_pose = parse_coords_to_pose(wallet_coords_str)
+  # verplaats naar wallet - hergebruik moveto_target_coords of maak aparte flow
+  moveto_target_coords(wallet_pose)
+
+  moveto_scanner()
+
+  # 4) Tweede scan
+  socket_send_string("socket1", "startScan")
+  textmsg("Sent startScan (wallet), waiting for boxFound")
+  scan_reply2 = socket_read_string("socket1", timeout=30000)
+  if scan_reply2 == None:
+    textmsg("No reply after second startScan - abort")
+    socket_close("socket1")
+    return
+  textmsg("Received scan reply 2: " + scan_reply2)
+  if scan_reply2 == "boxFound":
+    textmsg("Wallet scan result: boxFound")
+  else:
+    textmsg("Wallet scan unexpected reply: " + scan_reply2)
+
+  #code voor plaatsen van wallet in box
+
+  # eindig netjes
+  moveto_home()
+  socket_close("socket1")
+  textmsg("Sequence finished, socket closed")
+end
+
+
+main()
