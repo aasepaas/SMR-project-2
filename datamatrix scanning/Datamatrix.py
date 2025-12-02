@@ -79,7 +79,7 @@ class DataMatrixDecoder:
             return None
 
     def stop(self) -> None:
-        """Netjes stoppen van de worker: stuur stop-signaal en beëindig proces."""
+        """Stoppen van de worker: stuur stop-signaal en beëindig proces."""
         try:
             self.input_queue.put_nowait(None)
         except Exception:
@@ -164,7 +164,7 @@ class CameraScanner:
     def update_code_storage(self, decoded) -> None:
         if decoded:
             code = decoded.data.decode("utf-8")
-            self.last_code = code
+            self.last_code: str | None = str(code)
             self.last_code_time = time.time()
             logger.info(f"DECODE = {code}")
 
@@ -188,6 +188,12 @@ class CameraScanner:
     def exit_loop(self) -> None:
         self.running = False
 
+    def get_code(self) -> str:
+        if self.last_code is not None:
+            return self.last_code
+        else:
+            pass
+    
     def run(self, wallet_profile: ScanProfile, giftbox_profile: ScanProfile) -> None:
         print("W = Wallet profile | G = Giftbox profile | Q/ESC = quit")
         print("f/g = Focus | e/r = Exposure | b/n = Brightness\n")
