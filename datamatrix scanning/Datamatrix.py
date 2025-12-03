@@ -9,7 +9,9 @@ from multiprocessing import Process, Queue
 
 import cv2
 from cv2.typing import MatLike
-from pylibdmtx.pylibdmtx import decode, Decoded
+from pyzbar.pyzbar import decode as qr_decoder
+from pylibdmtx.pylibdmtx import decode as dm_decoder
+from pylibdmtx.pylibdmtx import Decoded
 
 # ====================== Microsecond-safe logging ======================
 class MicrosecondFormatter(logging.Formatter):
@@ -28,13 +30,14 @@ logger.addHandler(ch)
 # =====================================================================
 class ScanProfile:
     """Stores ROI + focus + exposure + brightness settings for a scan target."""
-    def __init__(self, name, roi, focus, exposure=None, brightness=None, data_timeout=2.0):
+    def __init__(self, name, roi, focus, exposure=None, brightness=None, data_timeout=2.0, type="datamatrix"):
         self.name = name
         self.roi = roi
         self.focus = int(focus)
         self.exposure = int(exposure) if exposure is not None else None
         self.brightness = int(brightness) if brightness is not None else None
         self.data_timeout = data_timeout
+        self.type = type # "datamatrix" of "barcode"
 
 # =====================================================================
 #  Data-Matrix Decoder Class
@@ -57,7 +60,7 @@ class DataMatrixDecoder:
                 break
             
             try:
-                results = decode(frame)
+                results = dm_decoder(frame)
                 if not self.result_queue.full():
                     self.result_queue.put(results[0] if results else None)
             except Exception as e:
@@ -65,7 +68,7 @@ class DataMatrixDecoder:
                 if not self.result_queue.full():
                     self.result_queue.put(None)
 
-    def decode_async(self, frame) -> None:
+    def dm_decoder_async(self, frame) -> None:
         if self.input_queue.empty():
             try:
                 self.input_queue.put(frame, timeout=0.01)
@@ -108,21 +111,26 @@ class CameraScanner:
             sys.exit(-1)
 
         self.configure_camera(profile)
-        self.decoder = DataMatrixDecoder()
+        self.dm_decoder = None #DataMatrixDecoder()
         self.last_code = None
         self.last_code_time = 0
 
     def set_profile(self, new_profile: ScanProfile) -> None:
         """Set new values for profile and prints them"""
+        self.profile = new_profile
         self.configure_camera(new_profile)
         print("\n================================")
-        print(f"[PROFILE] Switched to {new_profile.name}")
+        print(f"[PROFILE] Switched to {new_profile.name} ({new_profile.type})")
         print(f" ROI        → {new_profile.roi}")
         print(f" Focus      → {new_profile.focus}")
         print(f" Exposure   → {new_profile.exposure}")
         print(f" Brightness → {new_profile.brightness}")
         print("================================\n")
 
+        # if new_profile.type != "datamatrix" and self.dm_decoder is not None:
+        #     self.dm_decoder.stop()
+        #     self.dm_decoder = None
+            
     def configure_camera(self, profile: ScanProfile) -> None:
         """Set all camera settings based on the profile."""
         # Basisresolutie en autofocus
@@ -157,13 +165,42 @@ class CameraScanner:
             return None, None, False
         
         cv2.rectangle(frame, (self.left, self.top), (self.right, self.bottom), (0, 0, 255), 2)
-        gray_roi = self.preprocess_frame(frame)
+        roi = self.preprocess_frame(frame)
         
-        return frame, gray_roi, True
+        return frame, roi, True
 
-    def update_code_storage(self, decoded) -> None:
-        if decoded:
-            code = decoded.data.decode("utf-8")
+    # ==============================================================
+    # Aparte decoders per profiel (DATAMATRIX of BARCODE)
+    # ==============================================================
+    def decode_roi(self, roi):
+        # --- DataMatrix profiles ---
+        if self.profile.type == "datamatrix":
+            if self.dm_decoder is None:
+                self.dm_decoder = DataMatrixDecoder()
+                
+            self.dm_decoder.dm_decoder_async(roi)
+            result = self.dm_decoder.get_result()
+            if result:
+                try:
+                    return result.data.decode("utf-8")
+                except:
+                    return None
+            return None
+
+        # --- Barcode profiles ---
+        elif self.profile.type == "barcode":
+            # import pyzbar.pyzbar as pyzbar
+            results = qr_decoder(roi)
+            if results:
+                try:
+                    return results[0].data.decode("utf-8")
+                except:
+                    return None
+            return None
+
+    def update_code(self, code) -> None:
+        if code:
+            # code = decoded.data.decode("utf-8")
             self.last_code: str | None = str(code)
             self.last_code_time = time.time()
             logger.info(f"DECODE = {code}")
@@ -173,6 +210,13 @@ class CameraScanner:
             print("Code expired:", self.last_code)
             self.last_code = None
 
+    def update_state(self, state: str) -> object:
+        if (self.state != state):
+            logger.info(f"State changed to: {state}")
+            self.previous_state = self.state
+            self.state = state
+            return self.state
+         
     def adjust_camera_setting(self, attr_name, cap_prop, delta) -> None:
         value = getattr(self.profile, attr_name, None)
         if value is not None:
@@ -195,7 +239,7 @@ class CameraScanner:
             pass
     
     def run(self, wallet_profile: ScanProfile, giftbox_profile: ScanProfile) -> None:
-        print("W = Wallet profile | G = Giftbox profile | Q/ESC = quit")
+        print("W = Wallet profile | G = Giftbox profile | B = Barcode Profile | Q/ESC = quit")
         print("f/g = Focus | e/r = Exposure | b/n = Brightness\n")
         ShowDebugFrame = True
 
@@ -207,9 +251,10 @@ class CameraScanner:
                     break
                 
                 # Async decode
-                self.decoder.decode_async(roi)
-                decoded = self.decoder.get_result()
-                self.update_code_storage(decoded)
+                # self.decoder.decode_async(roi)
+                # decoded = self.decoder.get_result()
+                decoded = self.decode_roi(roi)
+                self.update_code(decoded)
 
                 if ShowDebugFrame:
                     self.show_fps(frame, start_time)
@@ -221,6 +266,7 @@ class CameraScanner:
                     27: lambda: self.exit_loop(),  # ESC
                     ord('W'): lambda: self.set_profile(wallet_profile),
                     ord('G'): lambda: self.set_profile(giftbox_profile),
+                    ord('B'): lambda: self.set_profile(barcode_profile),
                     ord('f'): lambda: self.adjust_camera_setting('focus', cv2.CAP_PROP_FOCUS, -1),
                     ord('g'): lambda: self.adjust_camera_setting('focus', cv2.CAP_PROP_FOCUS, +1),
                     ord('e'): lambda: self.adjust_camera_setting('exposure', cv2.CAP_PROP_EXPOSURE, -1),
@@ -238,9 +284,9 @@ class CameraScanner:
 
     def cleanup(self) -> None:
         # Stop decoder worker 
-        if self.decoder:
-            self.decoder.stop()
-            self.decoder = None
+        if self.dm_decoder:
+            self.dm_decoder.stop()
+            self.dm_decoder = None
             
         # Sluit camera en vensters
         if self.cap:
@@ -275,6 +321,19 @@ if __name__ == "__main__":
         exposure=-4,
         brightness=100,
         data_timeout=0.5
+    )
+
+    # Barcode profile
+    top3, left3 = 300, 1250
+    bottom3, right3 = top3 + 150, left3 + 300
+    barcode_profile = ScanProfile(
+        name="Barcode",
+        roi=(top3, bottom3, left3, right3),
+        focus=120,
+        exposure=-5,
+        brightness=120,
+        data_timeout=1.0,
+        type="barcode"
     )
 
     scanner = CameraScanner(wallet_profile, cam_index=0)
