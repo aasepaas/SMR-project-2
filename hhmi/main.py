@@ -5,6 +5,14 @@ import time
 from threading import Event
 import sys
 
+from scanner import *
+from databaserun import DatabaseRun
+from NetworkClient import Network_client
+import threading
+from state_enum import state_enum
+import time
+from statuscontrol import StatusControl
+
 
 class Worker(QObject):
     update_status = Signal(str)
@@ -25,50 +33,153 @@ class Worker(QObject):
 
     def run(self):
         timer = 0.4
+        ####profiles aanmaken
+        # Wallet profile
+        top1, left1 = 525, 800
+        top1, left1 = 100, 100
+        bottom1, right1 = top1 + 100, left1 + 100
+        wallet_profile = ScanProfile(
+            name="Wallet",
+            camera_index=1,
+            roi=(top1, bottom1, left1, right1),
+            focus=175,
+            exposure=-5,
+            brightness=100,
+            data_timeout=0.5
+        )
+
+        # Giftbox profile
+        top2, left2 = 300, 800
+        top2, left2 = 150, 150
+        bottom2, right2 = top2 + 150, left2 + 150
+        giftbox_profile = ScanProfile(
+            name="GiftBox",
+            camera_index=1,
+            roi=(top2, bottom2, left2, right2),
+            focus=120,
+            exposure=-4,
+            brightness=100,
+            data_timeout=0.5
+        )
+
+        # Barcode profile
+        top3, left3 = 300, 1250
+        top3, left3 = 200, 200
+        bottom3, right3 = top3 + 150, left3 + 300
+        barcode_profile = ScanProfile(
+            name="Barcode",
+            camera_index=0,
+            roi=(top3, bottom3, left3, right3),
+            focus=120,
+            exposure=-5,
+            brightness=120,
+            data_timeout=1.0,
+            type="barcode"
+        )
+
+        profiles = {
+            "wallet": wallet_profile,
+            "giftbox": giftbox_profile,
+            "barcode": barcode_profile
+        }
+
+        scanner = CameraScanner(barcode_profile, profiles)
+        # scanner.run(wallet_profile, giftbox_profile, barcode_profile)
+
+        scan_thread = threading.Thread(
+            target=scanner.run,
+            args=(wallet_profile, giftbox_profile, barcode_profile),
+            daemon=True
+        )
+        scan_thread.start()
+
+        client_socket = Network_client('127.0.0.1', 5000)
+        client_socket.strt_socket()
+        status = StatusControl()
+        db = DatabaseRun()
 
         while True:
             # 1) Als er een scan-request is, voer die uit en meld resultaat terug.
+            scanner.set_profile(barcode_profile)
             if self.scan_event.is_set():
+                if scanner.profile != barcode_profile:
+                    scanner.set_profile(barcode_profile)
                 print("Worker: scan gestart...")
-                # simulate scan work (vervang dit door echte scan-logica)
-                time.sleep(1.0)
-                # voorbeeld: resultaat True/False; hier simuleren we True
-                result = True
-                print(f"Worker: scan klaar, resultaat={result}")
-                # clear request en emit resultaat
-                self.scan_event.clear()
-                self.scan_finished.emit(result)
-                # ga terug naar top van loop om verdere requests te verwerken
-                continue
-
+                result = scanner.get_code()
+                if result is not None:
+                    print(f"Worker: scan klaar, resultaat={result}")
+                    # clear request en emit resultaat
+                    self.scan_event.clear()
+                    self.scan_finished.emit(True)
+                    # ga terug naar top van loop om verdere requests te verwerken
+                    #time.sleep(10000)
+                    continue
             # 2) Als start_event is gezet, voer de hoofd-loop uit
             if self.start_event.is_set():
                 print("Worker: start geaccepteerd, nu begint de loop!")
+                #client_socket.connect_client()
                 # verwerk elke wallet sequentieel (current -> succes/unsuccessful)
-                for i in range(50):
+                i = 0
+                box_ID = None
+                while True:
+                    state = client_socket.receive_client()
+                    current_state = status.run(state)
                     gui_index = i + 1
-
+                    i += 1
                     # check of er een restart is aangevraagd vóór we beginnen met deze index
+                    if current_state == state_enum.SEND_GIFTBOX_DOORDINATES:
+                        print("SEND_GIFTBOX_DOORDINATES")
+                        self.update_box_status.emit(gui_index, "current")
+                        # #
+                    if current_state == state_enum.IDLE:
+                        print("idle")
+                        # #
+                    if current_state == state_enum.SCANNING_GIFTBOX:
+                        print("SCANNING_GIFTBOX")
+                        scanner.set_profile(giftbox_profile)
+                        print("Worker: giftbox scan gestart")
+                        while True:
+                            box_ID = scanner.get_code()
+                            if box_ID is not None:
+                                print(f"Worker: scan klaar, resultaat={box_ID}")
+                                db.bbuffer = box_ID
+                                db.send_data(status.get_status())
+                                #check met if statement of hij in de database gevonden is of niet
+                                continue
+
+                    if current_state == state_enum.SEND_WALLET_COORDINATES:
+                        print("SEND_WALLET_COORDINATES")
+                        # #
+
+                    if current_state == state_enum.SCANNING_WALLET:
+                        print("SCANNING_WALLET")
+                        scanner.set_profile(wallet_profile)
+                        print("Worker: giftbox scan gestart")
+                        while True:
+                            wallet_ID = scanner.get_code()
+                            if wallet_ID is not None:
+                                print(f"Worker: scan klaar, resultaat={wallet_ID}")
+                                db.ibuffer = wallet_ID
+                                db.send_data(status.get_status())
+                                # check met if statement of hij in de database gevonden is of niet
+                                #graag self.update_box_status.emit(gui_index, "unsuccessful")
+                                #of self.update_box_status.emit(gui_index, "succes") op basis of hij de juiste wallet heeft
+                                continue
+                    if current_state == state_enum.SWITCH_CAMERA:
+                        print("SWITCH_CAMERA")
+                    if current_state == state_enum.PROCESSING:
+                        print("PROCESSING")
+                        # #
+                    if current_state == state_enum.ERROR:
+                        print("ERROR")
+                        # #
+                    if current_state == state_enum.DONE_CYCLE:
+                        print("DONE_CYCLE")
+
                     if self.restart_flag:
                         print(f"Worker: restart_flag gedetecteerd vóór index {gui_index}, break")
                         self.restart_flag = False
                         break
-
-                    # MARKER: current
-                    self.update_box_status.emit(gui_index, "current")
-                    # geef GUI tijd om te reageren / knipper te starten
-                    time.sleep(timer)
-
-                    # controleer of er een error opgetreden is tijdens current
-                    if self.error_event.is_set():
-                        print(f"Worker: error_event tijdens 'current' bij index {gui_index}")
-                        # markeer deze als unsuccessful en stop de run
-                        self.update_box_status.emit(gui_index, "unsuccessful")
-                        break
-
-                    # MARKER: succes
-                    self.update_box_status.emit(gui_index, "succes")
-                    time.sleep(timer)
 
                     # controleer opnieuw op error na succes (optioneel)
                     if self.error_event.is_set():
