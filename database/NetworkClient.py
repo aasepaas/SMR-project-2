@@ -1,3 +1,6 @@
+import socket as sck
+import time
+
 class Network_client:
     def __init__(self, IP, PORT):
         self.addr = (IP,PORT)
@@ -26,15 +29,18 @@ class Network_client:
     
     def receive_client(self):
         
+            try:
+                data_receive = self.client_socket.recv(2048).decode('utf-8')
+                print(f"AWAITING Data from: {self.client_addr}")
             
-            data_receive = self.client_socket.recv(2048).decode('utf-8')
-            print(f"AWAITING Data from: {self.client_addr}")
         
-            if not data_receive:
-                return None
-            else:
-                print(f"Data RECEIVED From: {self.client_addr} \n Data: {data_receive}")
-                return data_receive
+                if not data_receive:
+                    return None
+                else:
+                    print(f"Data RECEIVED From: {self.client_addr} \n Data: {data_receive}")
+                    return data_receive
+            except ConnectionResetError:
+                    print(f"Connection LOST from: {self.client_addr}")
 
     def send_client(self, message):
         if type(message) != str :

@@ -1,7 +1,7 @@
 
 from state_enum import state_enum
 import logging
-from database.SMN import CHANGE, Event, SMNState
+from SMN import CHANGE, Event, SMNState
 
 class StatusControl:
     def __init__(self):
@@ -14,13 +14,13 @@ class StatusControl:
 
    
 
-    def run (self, event:Event) -> state_enum:
-        logging.info(f"Current State: {self.state}, Event: {event.name}")
+    def run (self, event:Event) -> SMNState:
+        logging.info(f"Current State: {self.state}, Event: {event}")
         if event in CHANGE[self.state]:
             self.state = CHANGE[self.state][event]
             logging.info(f"Transitioned to State: {self.state}")
         else:
-            logging.warning(f"No transition defined for State: {self.state} with Event: {event.name}")
+            logging.warning(f"No transition defined for State: {self.state} with Event: {event}")
             self.state = SMNState.ERROR
-            return self.state
+        return self.state
         
