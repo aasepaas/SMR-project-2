@@ -11,12 +11,11 @@ const int SERVO_PIN = 27;
 
 const int microstep = 32;
 
-// ----- CREATE OBJECTS -----
 AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
 Servo myServo;
 
 unsigned long lastServoUpdate = 0;
-const unsigned long servoInterval = 50;  // 20ms = 50Hz (perfect for servo)
+const unsigned long servoInterval = 50;
 int servoAngle = 0;
 static int smoothAngle = 0;
 
@@ -38,17 +37,15 @@ void loop() {
   bool Stepper_On  = !digitalRead(Stepper_In);
   int Servo_On  = analogRead(Servo_In);
 
-  // ----- SERVO CODE (SLOW) -----
+  // ----- SERVO CODE -----
   unsigned long now = millis();
   if (now - lastServoUpdate >= servoInterval) {
     lastServoUpdate = now;
 
-    
     servoAngle = map(Servo_On, 0, 4095, 0, 110); 
     smoothAngle = (smoothAngle * 0.8) + (servoAngle * 0.2);
     myServo.write(smoothAngle);
-
-
+    
     Serial.print("Stepper on=");
     Serial.print(Stepper_On);
     Serial.print("Servo on=");
@@ -59,12 +56,8 @@ void loop() {
     Serial.println(smoothAngle);
   }
 
-  if (Stepper_On) {
-    stepper.moveTo(0.25 * 200 * microstep);
-  }
-  else {
-    stepper.moveTo(0);
-  }
-
+  // ----- STEPPER CODE -----
+  if (Stepper_On) stepper.moveTo(0.25 * 200 * microstep);
+  else stepper.moveTo(0);
   stepper.run();
 }
