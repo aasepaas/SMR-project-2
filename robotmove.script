@@ -1,167 +1,116 @@
-#positions 
-home = p[0.0, -0.5, 0.5, 0, 3.14, 0]
-lowerz = p[0.2, -0.3, 0.1, 0, 3.14, 0]
-raisez = p[0.2, -0.3, 0.4, 0, 3.14, 0]  
-openerpos = p[0.5, 0.0, 0.3, 0, 3.14, 0]
-scannerpos = p[0.0, 0.5, 0.3, 0, 3.14, 0]
-endpos = p[0.0, 0.6, 0.3, 0, 3.14, 0]
-failurepos = p[0.0, 0.4, 0.3, 0, 3.14, 0]
 
-#coords = socket_read_string("socket1", timeout=0)
+coords = p[0.53938, 0.01027, 0.21500, 0.084, -3.152, -0.022]
+lowerzwallet = 0.19500
+raisezwallet = 0.21500
+walletscanner_pos = p[0.53938, 0.01027, 0.30000, 0.084, -3.152, -0.022]
+boxscanner_pos = p[0.40000, -0.20000, 0.30000, 0.084, -3.152, -0.022]
+
+ip = "192.168.0.43"
+socket_name = "socket1"
 
 
-#pickup step 
+
+
+
+
+def set_pose_z(pose, new_z):
+    return p[pose[0], pose[1], new_z, pose[3], pose[4], pose[5]]
+end
+
+
 def moveto_target_coords(coords):
-  movel(coords, a=1.2, v=0.25)
-  movel(lowerz, a=1.2, v=0.25)
-  set_standard_digital_out(0, True)  # Activate vacuum
-  movel(raisez, a=1.2, v=0.25)
-  sleep(1)
-  set_standard_digital_out(1, True)  # activate gripper
-  sleep(1)
-  set_standard_digital_out(0, False)  # deactivate vacuum
-end 
+    set_standard_analog_out(0, 0)
+    movel(coords, a=1.2, v=0.25)
+    movel(set_pose_z(coords, lowerzwallet))
+    set_standard_digital_out(0, True)
+    set_standard_analog_out(0, 0.33) 
+    movel(set_pose_z(coords, 0.26018))
+    movel(set_pose_z(coords, raisezwallet))
+    sleep(1)
+    set_standard_digital_out(0, False)
+end
+
+def moveto_scanner(msg):
+    if msg == "wallet":
+        movel(walletscanner_pos, a=1.2, v=0.25)
+    elif msg == "box":
+        movel(boxscanner_pos, a=1.2, v=0.25)
+    else:
+        popup("Error: Unknown scanner position", title="Error", error=True)
+        textmsg("error: unknown scanner position")
+        socket_send_string("error: unknown scanner position", socket_name)
+    sleep(1)
+end
+
+def scan():
+  while True:
+    socket_send_string(socket_name, "scan")
+    correct = socket_read_string(socket_name, timeout=0)
+    if correct == "correct":
+      moveto_opener(failstate=False)
+      break
+    else if correct == "incorrect":
+      moveto_opener(failstate=True)
+      break
+    else:
+      popup("Error: Unknown scan result", title="Error", error=True)
+      textmsg("error: unknown scan result")
+      socket_send_string("error: unknown scan result", socket_name)
+      sleep(1)
+      continue
+    
+    
 
 def moveto_home():
-  movel(home, a=1.2, v=0.5)
-end 
+    home_pos = p[0.50000, 0.00000, 0.50000, 0.000, -3.1415, 0.000]
+    movel(home_pos, a=1.2, v=0.25)
+end
 
-def moveto_opener(failstate):
+def moveto_opener(failstate=False):
+    # Use correct variables
     movel(openerpos, a=1.2, v=0.5)
-    if (get_standard_digital_out(2) == True):
+    if get_standard_digital_out(2):
         set_standard_digital_out(2, False)  # deactivate motor
         sleep(1000)
-    movel(lowerz, a=1.2, v=0.25)
-    if (failstate == False):
-        set_standard_digital_out(1, True)  # activate gripper
-        sleep(1)
-        movel(raisez, a=1.2, v=0.25)
-        movel(faulurepos, a=1.2, v=0.5)
-        set_standard_digital_out(1, False)  # deactivate gripper
-        sleep(1)
-    else:
-    set_standard_digital_out(1, False)  # deactivate gripper
-    sleep(1)
-    movel(raisez, a=1.2, v=0.25)
-    set_standard_digital_out(2, True)  # activate motor
-    sleep(2)
-end
 
-def moveto_scanner():
-    movel(scannerpos, a=1.2, v=0.5)
-    message = socket_send_string("socket1", "scan")
-    correct = socket_read_string("socket1", timeout=0)
-    if (correct == "yes"):
-        textmsg("Scan successful")
-        movel(endpos, a=1.2, v=0.5)
-    else:
-        textmsg("Scan failed, moving to failure position")
+    movel(lowerzwallet, a=1.2, v=0.25)
+    
+    if failstate:
+        set_standard_analog_out(1, 0.33)
+        sleep(1)
+        movel(raisezwallet, a=1.2, v=0.25)
         movel(failurepos, a=1.2, v=0.5)
-        moveto_opener(True)
+        set_standard_analog_out(1, 0.0)
+        sleep(1)
+    else:
+        set_standard_analog_out(1, 0.0)
+        sleep(1)
+        movel(raisezwallet, a=1.2, v=0.25)
+        set_standard_digital_out(2, True)
+        sleep(2)
 end
-
-
-##new code
-def parse_pose_string(pose_str):
-  # fallback: als string None of te kort
-  if pose_str == None:
-    textmsg("empty pose string")
-    return None
-  
-  # split string op spaties
-  parts = split(pose_str, " ")
-  
-  if size(parts) != 6:
-    textmsg("Invalid pose string, expected 6 values")
-    return None
-
-  # convert naar float
-  x = to_float(parts[0])
-  y = to_float(parts[1])
-  z = to_float(parts[2])
-  rx = to_float(parts[3])
-  ry = to_float(parts[4])
-  rz = to_float(parts[5])
-
-  return p[x, y, z, rx, ry, rz]
-end
-
 
 def main():
-  #change ip and port as needed
-  socket_open("127.0.0.1", 12344, "socket1")
-  textmsg("Socket opened - starting sequence")
-  recv = socket_read_string("socket1", timeout=10000) # wacht tot 10s
-
-
-  # request giftbox coords from server/lapopt
-  socket_send_string("socket1", "boxCoords")
-  textmsg("Requested boxCoords")
-  coords_str = socket_read_string("socket1", timeout=10000) # wacht tot 10s
-  if coords_str == None:
-    textmsg("No coords received for box - abort")
-    socket_close("socket1")
-    return
-  textmsg("Received box coords: " + coords_str)
-
-  # parse en verplaats naar box en dan scanner positie
-  box_pose = parse_coords_to_pose(coords_str)
-  moveto_target_coords(box_pose)
-  moveto_scanner()
-
-  # 2) vraag server te scannen
-  socket_send_string("socket1", "startScan")
-  textmsg("Sent startScan, waiting for boxFound")
-  scan_reply = socket_read_string("socket1", timeout=30000) # scan kan even duren
-  if scan_reply == None:
-    textmsg("No reply after startScan - abort")
-    socket_close("socket1")
-    return
-  textmsg("Received scan reply: " + scan_reply)
-  # Als server 'boxFound' terugstuurt, ga verder; anders probeer fallback
-  if scan_reply == "boxFound":
-    textmsg("Box found - continue")
-  else:
-    textmsg("Unexpected reply to startScan: " + scan_reply)
+  socket_open(socket_name, ip, 30002)
+  while True:
+    if socket_read_string(socket_name, timeout=0) == "stop":
+      break
+    coords = socket_read_string(socket_name, timeout=0)
+    moveto_target_coords(coords)
+    socket_send_string("picked", socket_name)
+    msg = socket_read_string(socket_name, timeout=0)
+    moveto_scanner(msg)
+    scan()
+    coordswallet = socket_read_string(socket_name, timeout=0)
+    moveto_target_coords(coordswallet)
+    socket_send_string("pickedwallet", socket_name)
+    msg = socket_read_string(socket_name, timeout=0)
+    moveto_scanner(msg)
+    scan()
   
-  moveto_opener()
-
-  # 3) Vraag wallet coords
-  socket_send_string("socket1", "walletCoords")
-  textmsg("Requested walletCoords")
-  wallet_coords_str = socket_read_string("socket1", timeout=10000)
-  if wallet_coords_str == None:
-    textmsg("No wallet coords received - abort")
-    socket_close("socket1")
-    return
-  textmsg("Received wallet coords: " + wallet_coords_str)
-  wallet_pose = parse_coords_to_pose(wallet_coords_str)
-  # verplaats naar wallet - hergebruik moveto_target_coords of maak aparte flow
-  moveto_target_coords(wallet_pose)
-
-  moveto_scanner()
-
-  # 4) Tweede scan
-  socket_send_string("socket1", "startScan")
-  textmsg("Sent startScan (wallet), waiting for boxFound")
-  scan_reply2 = socket_read_string("socket1", timeout=30000)
-  if scan_reply2 == None:
-    textmsg("No reply after second startScan - abort")
-    socket_close("socket1")
-    return
-  textmsg("Received scan reply 2: " + scan_reply2)
-  if scan_reply2 == "boxFound":
-    textmsg("Wallet scan result: boxFound")
-  else:
-    textmsg("Wallet scan unexpected reply: " + scan_reply2)
-
-  #code voor plaatsen van wallet in box
-
-  # eindig netjes
   moveto_home()
-  socket_close("socket1")
-  textmsg("Sequence finished, socket closed")
-end
+  socket_close(socket_name)
 
 
-main()
+
+moveto_target_coords(coords)
