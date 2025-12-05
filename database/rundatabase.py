@@ -5,8 +5,9 @@ import time
 import threading
 
 
-from scanner import CameraScanner, ScanProfile, DataMatrixDecoder
-from Statuscontrol import StatusControl
+
+from StatusControl import StatusControl
+from SMN import SMNState
 from state_enum import state_enum
 
 class DatabaseRun:
@@ -52,7 +53,7 @@ class DatabaseRun:
 
         def send_data(self, state):
 
-            if state == state_enum.SCANNING_WALLET:
+            if state == SMNState.SCANNING_WALLET:
             
 
         
@@ -117,10 +118,10 @@ def get_values(valswallet, valsprotector, dummy):
     with dummy.lock:
         state = StatusControl().get_status()
 
-    if state == state_enum.SCANNING_GIFTBOX:
+    if state == SMNState.SCANNING_GIFTBOX:
         return valswallet.get_code(), None
 
-    if state == state_enum.SCANNING_WALLET:
+    if state == SMNState.SCANNING_WALLET:
         return None, valsprotector.get_code()
 
     return None, None

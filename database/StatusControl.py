@@ -1,35 +1,26 @@
+
 from state_enum import state_enum
 import logging
+from SMN import CHANGE, Event, SMNState
 
 class StatusControl:
-    def init(self):
-        self.state = state_enum.IDLE
+    def __init__(self):
+        self.state = SMNState.IDLE
+
+
     def set_status(self, new_state):
         self.state = new_state
 
 
-    def update_state(self, state: str) -> str:
-        if (self.state != state):
-            print(f"State changed from {self.previous_state} to {state}")
-            self.previous_state = self.state
-            self.state = state
-            return self.state
+   
 
-    def run (self, state) -> state_enum:
-        self.state = state
-        if state == "SCAN_GIFTBOX":
-            self.update_state(state_enum.SCANNING_GIFTBOX)
-        elif state == "SWITCH_CAMERA":
-            self.update_state(state_enum.SWITCH_CAMERA)
-        elif state == "SCAN_WALLET":
-            self.update_state(state_enum.SCANNING_WALLET)
-        elif state == "PROCESS":
-            self.update_state(state_enum.PROCESSING)
-        elif state == "ERROR":
-            self.update_state(state_enum.ERROR)
-        elif state == "DONE_CYCLE":
-            self.update_state(state_enum.DONE_CYCLE)
+    def run (self, event:Event) -> SMNState:
+        logging.info(f"Current State: {self.state}, Event: {event}")
+        if event in CHANGE[self.state]:
+            self.state = CHANGE[self.state][event]
+            logging.info(f"Transitioned to State: {self.state}")
         else:
-            self.update_state(state_enum.IDLE)
-
+            logging.warning(f"No transition defined for State: {self.state} with Event: {event}")
+            self.state = SMNState.ERROR
         return self.state
+        
