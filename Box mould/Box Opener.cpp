@@ -1,50 +1,70 @@
 #include <Arduino.h>
 #include <AccelStepper.h>
+#include <Servo.h>
 
 // ----- PIN DEFINITIONS -----
-const int STEP_PIN = 19;
-const int DIR_PIN  = 27;
-const int BTN_CW   = 33;
-const int microstep  = 32;
+const int STEP_PIN = 33;
+const int DIR_PIN  = 32;
+const int Stepper_In = 21;
+const int Servo_In = 19;
+const int SERVO_PIN = 27;
 
-// ----- CREATE STEPPER OBJECT -----
+const int microstep = 32;
+
+// ----- CREATE OBJECTS -----
 AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
+Servo myServo;
 
-// Debug timing
-unsigned long lastDebug = 0;
-const unsigned long debugInterval = 200;   // ms between prints
+unsigned long lastServoUpdate = 0;
+const unsigned long servoInterval = 50;  // 20ms = 50Hz (perfect for servo)
+int servoAngle = 0;
+static int smoothAngle = 0;
 
 void setup() {
   Serial.begin(115200);
 
-  pinMode(BTN_CW, INPUT_PULLUP);
+  pinMode(Stepper_In, INPUT_PULLUP);
+  pinMode(Servo_In, INPUT_PULLUP);
 
-  stepper.setMaxSpeed(0.25 * 200 * microstep);
-  stepper.setAcceleration(0.25 * 200 * microstep);
+  float speed = 0.25 * 200 * microstep;
+  stepper.setMaxSpeed(speed);
+  stepper.setAcceleration(speed);
+
+  myServo.attach(SERVO_PIN);
 }
 
 void loop() {
 
-  // ----- Read buttons -----
-  bool cwPressed  = !digitalRead(BTN_CW);
+  bool Stepper_On  = !digitalRead(Stepper_In);
+  int Servo_On  = analogRead(Servo_In);
 
-  // ----- Rate-Limited Debug Output -----
+  // ----- SERVO CODE (SLOW) -----
   unsigned long now = millis();
-  if (now - lastDebug >= debugInterval) {
-    lastDebug = now;
+  if (now - lastServoUpdate >= servoInterval) {
+    lastServoUpdate = now;
 
-    Serial.print("CW=");
-    Serial.println(cwPressed);
+    
+    servoAngle = map(Servo_On, 0, 4095, 0, 110); 
+    smoothAngle = (smoothAngle * 0.8) + (servoAngle * 0.2);
+    myServo.write(smoothAngle);
+
+
+    Serial.print("Stepper on=");
+    Serial.print(Stepper_On);
+    Serial.print("Servo on=");
+    Serial.print(Servo_On);
+    Serial.print(" | Servo Angle=");
+    Serial.print(servoAngle);
+    Serial.print(" | smooth Angle=");
+    Serial.println(smoothAngle);
   }
 
-  // ----- Motor Direction & Speed -----
-  if (cwPressed) {
+  if (Stepper_On) {
     stepper.moveTo(0.25 * 200 * microstep);
   }
   else {
     stepper.moveTo(0);
   }
 
-  // Run motor smoothly (must be called constantly)
-  stepper.runToPosition();
+  stepper.run();
 }
