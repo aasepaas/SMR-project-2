@@ -3,10 +3,10 @@
 class DatabaseConfig
 {
 
-    public static $servernaam = "localhost";
-    public static $gebruikersnaam = "root";
-    public static $wachtwoord = "your_password";
-    public static $databasenaam = "your_database";
+    public $servernaam = "192.168.1.105";
+    public $gebruikersnaam = "root";
+    public $wachtwoord = "your_password";
+    public $databasenaam = "your_database";
 
     public $iterator = 1;
     public $conn;
@@ -28,8 +28,24 @@ class DatabaseConfig
         if ($conn->connect_error) {
             die("Connection failed: " . $conn->connect_error);
         }
+
         return $conn;
     }
+
+    public function insert_values($boxid, $id, $number)
+    {
+        $sqlq = $this->conn->prepare("INSERT INTO `premium-wallet` (`Number`, `BoxID`, `ID`) VALUES (?, ?, ?)");
+        $sqlq->bind_param("s", $boxid, $id);
+        $sqlq->bind_param("i", $number);
+        $sqlq->execute();
+        $checkinsert = $sqlq->affected_rows;
+        if ($checkinsert) {
+            echo "values $boxid and $id inserted successfully.";
+        } else {
+            echo "Error inserting values: " . $this->conn->error;
+        }
+    }
+
 
     public function determineMatchingId($boxid)
     {
@@ -44,7 +60,21 @@ class DatabaseConfig
         } else {
             return null;
         }
+    }
+
+    public function check_box_id($boxid)
+    {
+        $sqlq = $this->conn->prepare("SELECT * FROM `premium-wallet` WHERE `BoxID` = ?");
+        $sqlq->bind_param("s", $boxid);
+        $sqlq->execute();
+        $result = $sqlq->get_result();
+        if ($result->num_rows > 0) {
+            return true;
+        } else {
+            return false;
         }
+    }
+
     public function checkID($boxid, $id)
     {
         $dbid = $this->determineMatchingId($boxid);
@@ -55,7 +85,7 @@ class DatabaseConfig
         } else {
             return false;
         }
-        
+
 
 
     }
@@ -66,4 +96,4 @@ class DatabaseConfig
 
 }
 
-   ?>
+?>
