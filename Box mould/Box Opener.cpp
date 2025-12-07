@@ -5,8 +5,8 @@
 // ----- PIN DEFINITIONS -----
 const int STEP_PIN = 33;
 const int DIR_PIN  = 32;
-const int Stepper_In = 21;
-const int Servo_In = 19;
+const int Stepper_In = 26;
+const int Servo_In = 25;
 const int SERVO_PIN = 27;
 
 const int microstep = 32;
@@ -25,7 +25,7 @@ void setup() {
   pinMode(Stepper_In, INPUT_PULLUP);
   pinMode(Servo_In, INPUT_PULLUP);
 
-  float speed = 0.25 * 200 * microstep;
+  float speed = 0.25 * 500 * microstep;
   stepper.setMaxSpeed(speed);
   stepper.setAcceleration(speed);
 
@@ -34,7 +34,7 @@ void setup() {
 
 void loop() {
 
-  bool Stepper_On  = !digitalRead(Stepper_In);
+  bool Stepper_On  = digitalRead(Stepper_In);
   int Servo_On  = analogRead(Servo_In);
 
   // ----- SERVO CODE -----
@@ -45,7 +45,7 @@ void loop() {
     servoAngle = map(Servo_On, 0, 4095, 0, 110); 
     smoothAngle = (smoothAngle * 0.8) + (servoAngle * 0.2);
     myServo.write(smoothAngle);
-    
+
     Serial.print("Stepper on=");
     Serial.print(Stepper_On);
     Serial.print("Servo on=");
@@ -54,10 +54,16 @@ void loop() {
     Serial.print(servoAngle);
     Serial.print(" | smooth Angle=");
     Serial.println(smoothAngle);
+
+    // ----- STEPPER CODE -----
+    if (Stepper_On == true) {
+      stepper.moveTo(0.3 * 200 * microstep);
+    }
+    else {
+      stepper.moveTo(0);
+    }
   }
 
-  // ----- STEPPER CODE -----
-  if (Stepper_On) stepper.moveTo(0.25 * 200 * microstep);
-  else stepper.moveTo(0);
+  
   stepper.run();
 }
