@@ -1,4 +1,5 @@
 from Datamatrixgit_aangepast import CameraScanner, ScanProfile
+from roi_auto_detector import ROIAutoDetector
 import keyboard
 import time
 import threading
@@ -7,6 +8,14 @@ import threading
 #  MAIN
 # =====================================================================
 if __name__ == "__main__":
+
+    # ---------------------------
+    #  Get ROIs giftbox matrices
+    # ---------------------------
+    detector = ROIAutoDetector(camera_index=0, DEBUG=True)
+    # detector = ROIAutoDetector(camera_index=0, DEBUG=False)
+    Giftbox_results = detector.run()
+    print(f"Detected ROIs: {Giftbox_results}")
     
     # ---------------------------
     #  Define Profiles
@@ -18,7 +27,7 @@ if __name__ == "__main__":
     bottom1, right1 = top1 + 100, left1 + 100
     wallet_profile = ScanProfile(
         name="Wallet",
-        camera_index = 1,
+        camera_index = 0,
         roi=(top1, bottom1, left1, right1),
         focus=175,
         exposure=-5,
@@ -26,16 +35,14 @@ if __name__ == "__main__":
         data_timeout=0.5
     )
 
-    # Giftbox profile
-    top2, left2 = 300, 800
-    top2, left2 = 150, 150
-    bottom2, right2 = top2 + 150, left2 + 150
+
+    # Giftbox profile (single ROI)
     giftbox_profile = ScanProfile(
         name="GiftBox",
-        camera_index = 1,
-        roi=(top2, bottom2, left2, right2),
+        camera_index=0,
+        roi=Giftbox_results,  # Pass as list
         focus=120,
-        exposure=-4,
+        exposure=-1,
         brightness=100,
         data_timeout=0.5
     )
@@ -61,68 +68,63 @@ if __name__ == "__main__":
         "barcode": barcode_profile
     }
 
+
+
     # ---------------------------
     # Start scanner
     # ---------------------------
     
-    scanner = CameraScanner(barcode_profile, profiles)
-    # scanner.run(wallet_profile, giftbox_profile, barcode_profile)
-    
-    scan_thread = threading.Thread(
-        target=scanner.run, 
-        args=(wallet_profile, giftbox_profile, barcode_profile),
-        daemon=True
-        )
-    scan_thread.start()
+    scanner = CameraScanner(profiles)
+    try: 
+        # scanner.run(wallet_profile, giftbox_profile, barcode_profile)
 
+        scan_thread = threading.Thread(
+            target=scanner.run, 
+            # args=(wallet_profile, giftbox_profile, barcode_profile),
+            daemon=True
+            )
+        scan_thread.start()
 
-    # print("[MAIN] Keyboard ready: w=wallet, g=giftbox, b=barcode, q=quit")
+        print("==============================================")
+        print("   CONTROLS: ")
+        print("   1 = Wallet profile")
+        print("   2 = Giftbox profile")
+        print("   3 = Barcode profile")
+        print("   q or ESC = Quit")
+        print("==============================================")
 
-    # while True:
-    #     # print("HELLO")
-    #     key = cv2.waitKey(1) & 0xFF
+        # ---------------------------
+        # Main Loop
+        # ---------------------------
 
-    #     if key == ord('q') or key == 27:
-    #         print("Exiting...")
-    #         scanner.exit_loop()
-    #         break
-    #     # print("BYEE")
-    #     if key == ord('1'):
-    #         scanner.switch_profile("wallet")
+        while True:
+            # Do not use __set_profile from outside the class, use switch_profile
+            
+            key = keyboard.read_key() 
+            print(f"Key pressed = {key}")
 
-    #     if key == ord('2'):
-    #         scanner.switch_profile("giftbox")
+            if key == "esc":
+                print("ESC has been pressed... Stopping...")
+                scanner.exit_loop()
+                break
+            elif key == "1":
+                print("Trying to switch to barcode giftbox profile")
+                scanner.switch_profile("barcode")
+            elif key == "2":
+                print("Trying to switch to datamatrix giftbox profile")
+                scanner.switch_profile("giftbox")
+            elif key == "3":
+                print("Trying to switch to datamatrix wallet profile")
+                scanner.switch_profile("wallet")
+            elif key == "4":
+                print("Trying to switch to super wallet profile")
+                scanner.switch_profile("super wallet")  # Test non-existing profile
+            time.sleep(0.2)
+            
+    finally:
+        scanner.exit_loop()
 
-    #     if key == ord('3'):
-    #         scanner.switch_profile("barcode")
-
-    print("==============================================")
-    print("   CONTROLS: ")
-    print("   1 = Wallet profile")
-    print("   2 = Giftbox profile")
-    print("   3 = Barcode profile")
-    print("   q or ESC = Quit")
-    print("==============================================")
-
-    # ---------------------------
-    # Main Loop
-    # ---------------------------
-
-    while True:
-        key = keyboard.read_key()  # lees de toets één keer
-        print(f"Key pressed = {key}")
-
-        if key == "esc":
-            print("ESC has been pressed... Stopping...")
-            scanner.exit_loop()
-            break
-        elif key == "1":
-            print("Switch to barcode giftbox profile")
-            scanner.set_profile(barcode_profile)
-        elif key == "2":
-            print("Switch to datamatrix giftbox profile")
-            scanner.set_profile(giftbox_profile)
-        elif key == "3":
-            print("Switch to datamatrix wallet profile")
-            scanner.set_profile(wallet_profile)
-        time.sleep(0.2)
+# 0 is Intern
+# 1 is Razer Kiyo
+# 2 is Daheng Imaging
+# 3 is Intel Realsense
