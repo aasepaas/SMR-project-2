@@ -10,4 +10,3 @@ class state_enum(Enum):
     SEND_WALLET_COORDINATES = 6
     SEND_GIFTBOX_DOORDINATES = 7
     DONE_CYCLE = 8
-
