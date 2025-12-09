@@ -1,9 +1,10 @@
-
+# Define coordinates
 coords = p[0.53938, 0.01027, 0.21500, 0.084, -3.152, -0.022]
 lowerzwallet = 0.19500
 raisezwallet = 0.21500
 walletscanner_pos = p[0.53938, 0.01027, 0.30000, 0.084, -3.152, -0.022]
 boxscanner_pos = p[0.40000, -0.20000, 0.30000, 0.084, -3.152, -0.022]
+home_pos = p[0.31100, -0.21680, -0.19100, 0.31400, -3.1390, -0.014]
 
 ip = "192.168.0.43"
 socket_name = "socket1"
@@ -12,12 +13,12 @@ socket_name = "socket1"
 
 
 
-
+# Function to apply new Z
 def set_pose_z(pose, new_z):
     return p[pose[0], pose[1], new_z, pose[3], pose[4], pose[5]]
 end
 
-
+# Function to move to target
 def moveto_target_coords(coords):
     set_standard_analog_out(0, 0)
     movel(coords, a=1.2, v=0.25)
@@ -33,8 +34,10 @@ end
 def moveto_scanner(msg):
     if msg == "wallet":
         movel(walletscanner_pos, a=1.2, v=0.25)
+        scan(wallet=True)
     elif msg == "box":
         movel(boxscanner_pos, a=1.2, v=0.25)
+        scan(wallet=False)
     else:
         popup("Error: Unknown scanner position", title="Error", error=True)
         textmsg("error: unknown scanner position")
@@ -42,9 +45,12 @@ def moveto_scanner(msg):
     sleep(1)
 end
 
-def scan():
+def scan(wallet=False):
+  if wallet:
+      socket_send_string(socket_name, "SCAN_WALLET")
+  else:
+      socket_send_string(socket_name, "SCAN_GIFTBOX")
   while True:
-    socket_send_string(socket_name, "scan")
     correct = socket_read_string(socket_name, timeout=0)
     if correct == "correct":
       moveto_opener(failstate=False)
@@ -62,7 +68,6 @@ def scan():
     
 
 def moveto_home():
-    home_pos = p[0.50000, 0.00000, 0.50000, 0.000, -3.1415, 0.000]
     movel(home_pos, a=1.2, v=0.25)
 end
 
@@ -100,17 +105,17 @@ def main():
     socket_send_string("picked", socket_name)
     msg = socket_read_string(socket_name, timeout=0)
     moveto_scanner(msg)
-    scan()
+    
     coordswallet = socket_read_string(socket_name, timeout=0)
     moveto_target_coords(coordswallet)
     socket_send_string("pickedwallet", socket_name)
     msg = socket_read_string(socket_name, timeout=0)
     moveto_scanner(msg)
-    scan()
+    
   
   moveto_home()
   socket_close(socket_name)
 
 
-
+# --- CALL THE FUNCTION SAFELY ---
 moveto_target_coords(coords)
