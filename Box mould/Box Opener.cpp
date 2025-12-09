@@ -10,6 +10,7 @@ const int Servo_In = 25;
 const int SERVO_PIN = 27;
 
 const int microstep = 32;
+const int gearRatio = 6;
 
 AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
 Servo myServo;
@@ -25,7 +26,7 @@ void setup() {
   pinMode(Stepper_In, INPUT_PULLUP);
   pinMode(Servo_In, INPUT_PULLUP);
 
-  float speed = 0.25 * 500 * microstep;
+  float speed = 0.25 * 500 * microstep * gearRatio;
   stepper.setMaxSpeed(speed);
   stepper.setAcceleration(speed);
 
@@ -57,13 +58,11 @@ void loop() {
 
     // ----- STEPPER CODE -----
     if (Stepper_On == true) {
-      stepper.moveTo(0.3 * 200 * microstep);
+      stepper.moveTo(0.3 * 200 * microstep * gearRatio);
     }
     else {
       stepper.moveTo(0);
     }
   }
-
-  
   stepper.run();
 }
