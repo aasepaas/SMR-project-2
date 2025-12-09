@@ -128,6 +128,7 @@ class Worker(QObject):
                 i = 0
                 gui_index = 0
                 box_ID = None
+                boxValue = False
                 while True:
                     ##new code
                     cmd = client_socket.receive_client()
@@ -168,14 +169,23 @@ class Worker(QObject):
                         print("SCANNING_GIFTBOX")
                         scanner.set_profile(giftbox_profile)
                         print("Worker: giftbox scan gestart")
-                        while True:
+                        scannotDone = True
+                        while scannotDone:
                             box_ID = scanner.get_code()
                             if box_ID is not None:
                                 print(f"Worker: scan klaar, resultaat={box_ID}")
                                 #db.buffer = box_ID
                                 db.bbuffer = "FK19T-0L3N-R8H6"
-                                db.send_data(SMNState.SCANNING_GIFTBOX)
+                                checkWaarde = db.send_data(current_state)
                                 #check met if statement of hij in de database gevonden is of niet
+                                if checkWaarde:
+                                    print("goed waarde bestaat")
+                                    scannotDone = False
+                                    boxValue = True
+                                else:
+                                    print("false waarde bestaat niet")
+                                    scannotDone = False
+                                    boxValue = False
                                 continue
 
                     if current_state == SMNState.SEND_WALLET_COORDINATES:
@@ -186,16 +196,22 @@ class Worker(QObject):
                         print("SCANNING_WALLET")
                         scanner.set_profile(wallet_profile)
                         print("Worker: giftbox scan gestart")
-                        while True:
+                        scannotDone = True
+                        while scannotDone:
                             wallet_ID = scanner.get_code()
                             if wallet_ID is not None:
                                 print(f"Worker: scan klaar, resultaat={wallet_ID}")
                                 #db.ibuffer = wallet_ID
                                 db.ibuffer = "QH82M-9D5Z-B7X1"
                                 db.send_data(SMNState.SCANNING_WALLET)
-                                # check met if statement of hij in de database gevonden is of niet
-                                #graag self.update_box_status.emit(gui_index, "unsuccessful")
-                                #of self.update_box_status.emit(gui_index, "succes") op basis of hij de juiste wallet heeft
+                                if checkWaarde:
+                                    print("goed waarde bestaat")
+                                    scannotDone = False
+                                    boxValue = True 
+                                else:
+                                    print("false waarde bestaat niet")
+                                    scannotDone = False
+                                    boxValue = False
                                 continue
                     if current_state == SMNState.SWITCH_CAMERA:
                         print("SWITCH_CAMERA")
@@ -206,6 +222,10 @@ class Worker(QObject):
                         print("ERROR")
                         # #
                     if current_state == SMNState.DONE_CYCLE:
+                        if boxValue:
+                            self.update_box_status.emit(gui_index, "succes")
+                        else:
+                            self.update_box_status.emit(gui_index, "unsuccessful")
                         print("DONE_CYCLE")
 
                     if self.restart_flag:

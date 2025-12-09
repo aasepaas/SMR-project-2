@@ -15,7 +15,7 @@ class DatabaseConfig
     {
         $this->servernaam = $server;
         $this->gebruikersnaam = $gebr;
-        $this->wachtwoord = $ww;
+        $this->wachtwoord = (string)$ww;
         $this->databasenaam = $db;
         $this->conn = $this->connect($server, $gebr, $ww, $db);
     }
@@ -24,7 +24,7 @@ class DatabaseConfig
 
     function connect($server, $gebruikersnaam, $wachtwoord, $db)
     {
-        $conn = new mysqli($server, $gebruikersnaam, $wachtwoord, $db);
+        $conn = new mysqli($server, $gebruikersnaam, (string)$wachtwoord, $db);
         if ($conn->connect_error) {
             die("Connection failed: " . $conn->connect_error);
         }

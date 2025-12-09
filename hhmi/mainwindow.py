@@ -1,13 +1,12 @@
 from PySide6.QtWidgets import (
     QApplication, QWidget, QPushButton, QVBoxLayout,
-    QLabel, QMainWindow, QStackedWidget, QMessageBox
+    QLabel, QMainWindow, QStackedWidget, QMessageBox,
+    QHBoxLayout, QSizePolicy, QGridLayout
 )
 
 from PySide6.QtCore import Qt
 from PySide6.QtCore import Signal, QPropertyAnimation, QEvent, QTimer
-
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QHBoxLayout, QPushButton, QSizePolicy, QGridLayout
+from PySide6.QtGui import QPixmap
 
 
 class Page1(QWidget):
@@ -19,10 +18,26 @@ class Page1(QWidget):
     def __init__(self, switch_callback):
         super().__init__()
 
-        layout = QVBoxLayout(self)
+        # --- GRIDLAYOUT i.p.v. QVBoxLayout ---
+        grid = QGridLayout(self)
+        grid.setContentsMargins(20, 20, 20, 20)
+        grid.setSpacing(20)
 
-        # Statusbox
-        self.status_box = QLabel("Status: Scan productsoort barcode")
+        # --- LOGO LINKS-BOVEN ---
+        self.logo_label = QLabel(self)
+        pixmap = QPixmap(r"C:\Users\aashi\Downloads\smrlogo.png")
+        self.logo_label.setPixmap(pixmap.scaled(
+            150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        ))
+
+        self.logo_labelSecrid = QLabel(self)
+        pixmap = QPixmap(r"C:\Users\aashi\Downloads\secridlogo.png")
+        self.logo_labelSecrid.setPixmap(pixmap.scaled(
+            150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        ))
+
+        # --- STATUSBOX (centraal, rechts van logo) ---
+        self.status_box = QLabel("Status: Klik op 'Start Scan' om productsoort te laten scannen")
         self.status_box.setAlignment(Qt.AlignCenter)
         self.status_box.setStyleSheet("""
             background-color: #00AEFF;
@@ -33,10 +48,9 @@ class Page1(QWidget):
             font-weight: bold;
         """)
         self.status_box.setFixedSize(1280, 310)
-        layout.addWidget(self.status_box)
-        layout.setAlignment(self.status_box, Qt.AlignHCenter)
+        # plaats in kolom 1 en laat eventueel nog 2 kolommen meerekenen voor centering
 
-        # Start Scan knop (nieuw)
+        # --- Start Scan knop ---
         self.startScanButton = QPushButton("Start Scan")
         self.startScanButton.setStyleSheet("""
             QPushButton {
@@ -54,12 +68,11 @@ class Page1(QWidget):
         """)
         self.startScanButton.setFixedSize(300, 80)
         self.startScanButton.setEnabled(True)  # standaard enabled
-        layout.addWidget(self.startScanButton)
-        layout.setAlignment(self.startScanButton, Qt.AlignHCenter)
-        # verbind startScanButton naar scan_requested
         self.startScanButton.clicked.connect(lambda: self.scan_requested.emit())
+        # plaats onder statusbox, in het midden (kolom 1)
+        
 
-        # Buttons
+        # --- Start knop ---
         self.startButton = QPushButton("Start")
         self.startButton.setStyleSheet("""
             QPushButton {
@@ -77,12 +90,14 @@ class Page1(QWidget):
         """)
         self.startButton.setFixedSize(300, 100)
         self.startButton.setEnabled(False)
+        grid.addWidget(self.startButton, 2, 3, 1,1)
+        grid.addWidget(self.startScanButton, 1, 3, 1, 1)
+        grid.addWidget(self.status_box, 0, 1, 1, 5)
+        grid.addWidget(self.logo_label, 0, 0, 1, 1)
+        grid.addWidget(self.logo_labelSecrid, 1, 0, 1, 1)
 
-        layout.addWidget(self.startButton)
-        layout.setAlignment(self.startButton, Qt.AlignHCenter)
 
-        # Emit start_clicked when button pressed.
-        # main() verbindt start_clicked -> start_event.set en -> switch_callback in de gewenste volgorde
+        # connect start signal
         self.startButton.clicked.connect(lambda: self.start_clicked.emit())
 
     def enable_start(self):
@@ -98,58 +113,67 @@ class Page2(QWidget):
     def __init__(self):
         super().__init__()
 
-        layout = QVBoxLayout(self)
-        layout.setSpacing(5)
-        layout.setContentsMargins(10, 10, 10, 10)
-        self.Errormsg = QMessageBox(self)
+        # --- GRIDLAYOUT voor Page2 ---
+        grid = QGridLayout(self)
+        grid.setContentsMargins(20, 20, 20, 20)
+        grid.setSpacing(10)
 
+        # --- LOGO LINKS-BOVEN ---
+        self.logo_label = QLabel(self)
+        pixmap = QPixmap(r"C:\Users\aashi\Downloads\smrlogo.png")
+        self.logo_label.setPixmap(pixmap.scaled(
+            150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        ))
+
+        self.logo_labelSecrid = QLabel(self)
+        pixmap = QPixmap(r"C:\Users\aashi\Downloads\secridlogo.png")
+        self.logo_labelSecrid.setPixmap(pixmap.scaled(
+            150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        ))
+
+        self.Errormsg = QMessageBox(self)
         self.blink_timers = {}
 
+        # Statusbox bovenaan (centraal)
         self.status_box = QLabel("Status: Inpakken gestart")
         self.status_box.setAlignment(Qt.AlignCenter)
         self.status_box.setStyleSheet("""
-                            background-color: #82B2C0;
-                            color: black;
-                            padding: 15px;
-                            border-radius: 8px;
-                            font-size: 22px;
-                            font-weight: bold;
-                        """)
+            background-color: #82B2C0;
+            color: black;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 22px;
+            font-weight: bold;
+        """)
         self.status_box.setFixedSize(1280, 310)
-        layout.addWidget(self.status_box)
-        layout.setAlignment(self.status_box, Qt.AlignHCenter)
 
+        # Wallet error status (rechterkolom)
         self.wallet_statusbox = []
-
         self.wallet_errorcount = 0
-        self.wallet_errorStatus = QLabel("Aantal Errors: "
-                                         f"{self.wallet_errorcount}")
-        self.wallet_errorStatus.setAlignment(Qt.AlignCenter)
+        self.wallet_errorStatus = QLabel("Aantal Errors: 0")
         self.wallet_errorStatus.setStyleSheet("""
-                                    background-color: #F1B8A4;
-                                    color: black;
-                                    padding: 15px;
-                                    border-radius: 8px;
-                                    font-size: 22px;
-                                    font-weight: bold;
-                                """)
+            background-color: #F1B8A4;
+            color: black;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 22px;
+            font-weight: bold;
+        """)
         self.wallet_errorStatus.setFixedSize(300, 300)
-
+        # we plaatsen deze in rij 1, kolom 1 (rechterkolom)
+        # maar eerst maken we de wallet_container in kolom 0
         self.wallet_container = QWidget()
         self.wallet_container_layout = QGridLayout()
         self.wallet_container_layout.setSpacing(5)
         self.wallet_container_layout.setContentsMargins(0, 0, 0, 0)
         self.wallet_container.setLayout(self.wallet_container_layout)
 
-        row_layout = QHBoxLayout()
-        row_layout.addWidget(self.wallet_container, alignment=Qt.AlignHCenter)
-        row_layout.addWidget(self.wallet_errorStatus, alignment=Qt.AlignHCenter)
-
-        layout.addLayout(row_layout)
-
+        
+        # Maak wallets en beginwaarden
         self.create_wallets(50, per_row=5)
         self.current_Wallet = 0
 
+        # Restart knop onderaan, gecentreerd over beide kolommen
         self.restartButton = QPushButton("Opnieuw starten")
         self.restartButton.setFixedSize(300, 100)
         self.restartButton.setStyleSheet("""
@@ -163,7 +187,20 @@ class Page2(QWidget):
             }
         """)
         self.restartButton.hide()
-        layout.addWidget(self.restartButton, alignment=Qt.AlignHCenter)
+
+        grid.setRowStretch(0, 1)   # status rij = klein
+        grid.setRowStretch(1, 1)   # lege rij / logo Secrid
+        grid.setRowStretch(2, 20)  # wallet-container rij = VEEL groter
+        grid.addWidget(self.status_box, 0, 1, 1, 5)
+        grid.addWidget(self.restartButton, 2, 0, 1, 2)
+        grid.addWidget(self.wallet_container, 1, 2, 1, 1)
+        grid.addWidget(self.wallet_errorStatus, 1, 4, 1, 1)
+        grid.addWidget(self.logo_label, 0, 0, 1, 1)
+        grid.addWidget(self.logo_labelSecrid, 1, 0, 1, 1)
+
+
+
+       
         self.restartButton.clicked.connect(self.restart_requested)
         self.error_event = None
 

@@ -101,6 +101,8 @@ class DatabaseRun:
 
             try:
                         result = json.loads(stdout)
+                        resBruikbaar = result.get("result", False)
+                        return resBruikbaar
                         print(result)
                         print("Result from PHP:", result)
             except json.JSONDecodeError:
