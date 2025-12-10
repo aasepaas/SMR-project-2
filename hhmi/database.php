@@ -35,8 +35,7 @@ class DatabaseConfig
     public function insert_values($boxid, $id, $number)
     {
         $sqlq = $this->conn->prepare("INSERT INTO `premium-wallet` (`Number`, `BoxID`, `ID`) VALUES (?, ?, ?)");
-        $sqlq->bind_param("s", $boxid, $id);
-        $sqlq->bind_param("i", $number);
+        $sqlq->bind_param("ssi", $boxid, $id, $number);
         $sqlq->execute();
         $checkinsert = $sqlq->affected_rows;
         if ($checkinsert) {
