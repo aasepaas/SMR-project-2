@@ -19,13 +19,19 @@ class Network_client:
         self.server_socket.close()
     
     def connect_client(self):
-        self.client_socket, self.client_addr = self.server_socket.accept()
-        print(f"Client connection ESTABLISHED From {self.client_addr} at {time.strftime('%d-%m-%Y %H:%M:%S', time.localtime())}")
-        self.client_socket.send("Server connection ESTABLISHED".encode('utf-8'))
-    
+        try:
+            self.client_socket, self.client_addr = self.server_socket.accept()
+            print(f"Client connection ESTABLISHED From {self.client_addr} at {time.strftime('%d-%m-%Y %H:%M:%S', time.localtime())}")
+            self.client_socket.send("Server connection ESTABLISHED".encode('utf-8'))
+        except ConnectionRefusedError as e:
+            print(f"Connection refused: {e}")
+
     def disconnect_client(self):
         print(f"CLOSING: {self.client_addr}")
-        self.client_socket.close() 
+        try:
+            self.client_socket.close() 
+        except Exception as e:
+            print(f"Error closing client socket: {e}")
     
     def receive_client(self):
         
@@ -43,8 +49,11 @@ class Network_client:
                     print(f"Connection LOST from: {self.client_addr}")
 
     def send_client(self, message):
-        if type(message) != str :
-            message = str(message).replace("[","(").replace("]",")")
-        
-        print(f"DATA TO SEND: {message}\n SENDING to : {self.client_addr}")
-        testje = self.client_socket.send(str(message).encode('utf-8'))
+        try:
+            if type(message) != str :
+                message = str(message).replace("[","(").replace("]",")")
+
+            print(f"DATA TO SEND: {message}\n SENDING to : {self.client_addr}")
+            testje = self.client_socket.send(str(message).encode('utf-8'))
+        except Exception as e:
+            print(f"Error sending data to client: {e}")

@@ -11,6 +11,18 @@ class SMNState:
     SEND_GIFTBOX_DOORDINATES = state_enum.SEND_GIFTBOX_DOORDINATES
     DONE_CYCLE = state_enum.DONE_CYCLE
 
+    def enter(self):
+        pass
+
+    def exit(self):
+        pass
+
+    def change(self, event):
+        if event in CHANGE[self]:
+            return CHANGE[self][event]
+        else:
+            return None
+
 class Event:
     START_SCAN_GIFTBOX = "SCAN_GIFTBOX"
     SWITCH_CAMERA = "SWITCH_CAMERA"
