@@ -3,7 +3,7 @@ from state_enum import state_enum
 import logging
 from SMN import CHANGE, Event, SMNState
 
-class StatusControl:
+class StatusControl(SMNState):
     def __init__(self):
         self.state = SMNState.IDLE
 

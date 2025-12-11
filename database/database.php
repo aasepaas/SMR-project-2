@@ -15,7 +15,7 @@ class DatabaseConfig
     {
         $this->servernaam = $server;
         $this->gebruikersnaam = $gebr;
-        $this->wachtwoord = $ww;
+        $this->wachtwoord = (string)$ww;
         $this->databasenaam = $db;
         $this->conn = $this->connect($server, $gebr, $ww, $db);
     }
@@ -24,7 +24,7 @@ class DatabaseConfig
 
     function connect($server, $gebruikersnaam, $wachtwoord, $db)
     {
-        $conn = new mysqli($server, $gebruikersnaam, $wachtwoord, $db);
+        $conn = new mysqli($server, $gebruikersnaam, (string)$wachtwoord, $db);
         if ($conn->connect_error) {
             die("Connection failed: " . $conn->connect_error);
         }
@@ -35,8 +35,7 @@ class DatabaseConfig
     public function insert_values($boxid, $id, $number)
     {
         $sqlq = $this->conn->prepare("INSERT INTO `premium-wallet` (`Number`, `BoxID`, `ID`) VALUES (?, ?, ?)");
-        $sqlq->bind_param("s", $boxid, $id);
-        $sqlq->bind_param("i", $number);
+        $sqlq->bind_param("iss", $number, $boxid, $id);
         $sqlq->execute();
         $checkinsert = $sqlq->affected_rows;
         if ($checkinsert) {

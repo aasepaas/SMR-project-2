@@ -101,8 +101,10 @@ class DatabaseRun:
 
             try:
                         result = json.loads(stdout)
+                        exists = result.get("result", False)
                         print(result)
                         print("Result from PHP:", result)
+                        return exists
             except json.JSONDecodeError:
                         print("Invalid JSON received:")
                         print(stdout)

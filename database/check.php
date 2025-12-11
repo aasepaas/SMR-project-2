@@ -8,7 +8,7 @@ function check_boxid($vals)
 {
 
     $boxid = $vals['boxid'];
-    $db = new DatabaseConfig("localhost", "appuser", "StrongPassword123!", "test");
+    $db = new DatabaseConfig("localhost", "root", "Bastiaaniskankercool1", "test");
     $result = $db->check_box_id($boxid);
     echo json_encode(["result" => $result]);
     $db->closeConnection();
@@ -18,7 +18,7 @@ function final_check($vals)
 
     $boxid = $vals['boxid'];
     $id = $vals['id'];
-    $db = new DatabaseConfig("localhost", "appuser", "StrongPassword123!", "test");
+    $db = new DatabaseConfig("localhost", "root", "Bastiaaniskankercool1", "test");
     $result = $db->checkID($boxid, $id);
     echo json_encode(["result" => $result]);
     $db->closeConnection();
