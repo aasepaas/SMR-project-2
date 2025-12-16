@@ -23,12 +23,10 @@ def run_thread(scanner: CameraScanner):
     # ---------------------------
     first = True
     while True:
-        # Do not use __set_profile from outside the class, use switch_profile
-        if scanner.Detected_all and first:
+        if scanner.detected_all and first:
             print(f"All codes detected {scanner.get_code() = }")
             first = False
 
-        # Non-blocking key polling so we don't miss scanner flag updates
         if keyboard.is_pressed("esc"):
             print("ESC has been pressed... Stopping...")
             scanner.exit_loop()
@@ -54,7 +52,6 @@ def run_thread_match_case(scanner, state=0):
 
     First = True
     while True: 
-        # Non-blocking key polling so we don't miss scanner flag updates
         if keyboard.is_pressed("esc"):
             print("ESC has been pressed... Stopping...")
             scanner.exit_loop()
@@ -62,13 +59,13 @@ def run_thread_match_case(scanner, state=0):
 
         match state:
             case 0:
-                time.sleep(2)  # Just a small delay to avoid busy-waiting
+                time.sleep(2) 
                 state = 1
             case 1:
                 if First:
                     scanner.switch_profile(giftbox_profile)
                     First = False
-                if scanner.Detected_all:
+                if scanner.detected_all:
                     print(f"All {len(scanner.get_code())} codes detected {scanner.get_code() = }")
                     First = True
                     state = 2
@@ -76,7 +73,7 @@ def run_thread_match_case(scanner, state=0):
                 if First:
                     scanner.switch_profile(giftbox_profile)
                     First = False
-                if scanner.Detected_all:
+                if scanner.detected_all:
                     print(f"All {len(scanner.get_code())} codes detected {scanner.get_code() = }")
                     First = True
                     state = 3

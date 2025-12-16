@@ -15,16 +15,15 @@ class ROIAutoDetector:
     Automatically detect datamatrices in camera feed and extract ROI coordinates.
     
     Usage:
-    - Press 'c' to capture frame and detect all datamatrices
-    - Press 'q' to quit
+    - Press 'c' to recapture frame and detect all datamatrices
+    - Press 'q' to quit and accept detected ROIs
     """
     
     def __init__(self, DEBUG: bool = False, DEBUGPROCESS: bool = False, recalc = "c"):
         self.debug = DEBUG
         self.debug_process = DEBUGPROCESS
         self.recalc = recalc
-                
-    
+                    
     @staticmethod
     def __connected_components_filtering(frame, Min_area=100, Max_area=500_000, squareness=10, connect=8):
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(frame, connectivity=connect)
@@ -34,10 +33,10 @@ class ROIAutoDetector:
         # print("Connected Components found:", num_labels - 1)
         for label in range (1, num_labels):
             area = stats[label, cv2.CC_STAT_AREA]
-            # print("label area:", area)
+            # print("area:", area)
             if area >= Max_area or area <= Min_area: # Verwijder kleine ruis
                 continue
-        
+            # print(f"{num_labels} area: {area}")
             x, y, w, h = stats[label, cv2.CC_STAT_LEFT], stats[label, cv2.CC_STAT_TOP], stats[label, cv2.CC_STAT_WIDTH], stats[label, cv2.CC_STAT_HEIGHT]
             points.append((x, y, w, h))
             
@@ -87,7 +86,7 @@ class ROIAutoDetector:
             cv2.imshow("Bounding Rectangles", Groffe_filter) 
         
         # Fijne filtering met connected components
-        Fijne_filter, boxes = self.__connected_components_filtering(Groffe_filter, Min_area=1000, Max_area=500_000, squareness=1, connect=8)                    
+        Fijne_filter, boxes = self.__connected_components_filtering(Groffe_filter, Min_area=1000, Max_area=100_000, squareness=1, connect=8)                    
         if self.debug_process: 
             cv2.imshow("Fijne_filter", Fijne_filter)
 
@@ -136,9 +135,9 @@ class ROIAutoDetector:
         contours, _ = cv2.findContours(th2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area < 1500 or area > 7000:
+            if area < 2500 or area > 5351:
                 continue
-            
+            # print("area:", area)
             x, y, w, h = cv2.boundingRect(cnt)
             points.append((x, y, w, h))
             
@@ -250,7 +249,6 @@ class ROIAutoDetector:
         
         return detected_frame, rois
 
-  
     def run(self, frame) -> List[Tuple[int, int, int, int]]:
         """Detecteer ROI's. Roep zelf destroywindows aan"""
         
@@ -274,7 +272,7 @@ class ROIAutoDetector:
      
         return rois
 
-    def capture_loop(self, frame, button: str = "c", skip_frames: int = 5) -> List[Tuple[int, int, int, int]]:
+    def capture_loop(self, frame, button: str = "c") -> List[Tuple[int, int, int, int]]:
         """
         Process a single `frame` interactively and return detected ROIs when the
         user confirms (presses `q`).
@@ -325,7 +323,7 @@ if __name__ == "__main__":
             
             if results == []: 
                 print("In capture loop, waiting for user input...")
-                results = detector1.capture_loop(frame, button=button, skip_frames=0)
+                results = detector1.capture_loop(frame, button=button)
             elif results != []:
                 print(f"{len(results)} ROI's detected, exiting capture loop.")
                 break

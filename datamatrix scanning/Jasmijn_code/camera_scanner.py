@@ -34,45 +34,51 @@ logger.addHandler(ch)
 #  Camera Scanner
 # =====================================================================
 class CameraScanner:
-    # =====================================================================
+    # =================================================================
     #  Initialization
-    # =====================================================================
+    # =================================================================
     def __init__(self, decoder: DataMatrixDecoder, detector: ROIAutoDetector, profile: ScanProfile = standard_profile, debug: bool = False) -> None: 
-        self.camera_lock = threading.Lock()
-        self.DEBUG = debug
-        self.running = True
-        self.switch = False        
-        self.Detected_all = False
-        self.datamatrixes = []  # Store detected datamatrix codes
-        self.request_roi_recalc = False
-        
+        # =============================================================
+        # Setting up received parameters
+        # =============================================================
+        self.dm_decoder = decoder
+        self.detector = detector
         self.profile = profile
-        self.rois = profile.rois
-               
+        self.rois: list = profile.rois
+        self.DEBUG: bool = debug
+
+        # =============================================================
+        # Setting up starting booleans and values
+        # =============================================================
+        self.camera_lock = threading.Lock()
+        self.running: bool = True
+        self.detected_all: bool = False
+        self.request_roi_recalc: bool = False
+        self.switch: bool = False        
+        self.datamatrixes: list = [] # Stores detected datamatrix codes
+        
+        # Store last detected code and its timestamp
+        self.last_code: str = ""
+        self.last_code_time = 0
+        
+        # ROI cycling for multi-ROI profiles
+        self.current_roi_index = 0
+        self.roi_transition_time = 0  # Track when ROI was last changed
+        
+        # Triple validation per ROI
+        self.current_roi_consecutive_code = None  # Track current consecutive code for this ROI
+        self.current_roi_consecutive_count = 0    # Count consecutive detections of same code
+        
+        # =============================================================
         # Open camera
+        # =============================================================
         self.cap = cv2.VideoCapture(self.profile.camera_index) 
         if not self.cap.isOpened():
             logger.error("Cannot initialize video capture")
             raise ValueError("Try a different camera_index")
 
         self.__configure_camera()
-        
-        self.detector = detector
-        self.dm_decoder = decoder
-        self.last_code: str = ""
-        self.last_code_time = 0
-        
-        # ROI cycling for multi-ROI profiles
-        self.current_roi_index = 0
-        # self.roi_detection_times = {}  # Track detection time per ROI index
-        self.roi_transition_time = 0  # Track when ROI was last changed
-        
-        # Triple validation per ROI
-        self.current_roi_consecutive_code = None  # Track current consecutive code for this ROI
-        self.current_roi_consecutive_count = 0    # Count consecutive detections of same code
-
-
-    
+         
     def __retrieve_rois(self) -> list[tuple[int, int, int, int]]:
         """Return a new list of ROIs."""
         results = []
@@ -84,7 +90,6 @@ class CameraScanner:
                     break
                 frame = frame_skip
                 time.sleep(0.01)
-
 
             if self.DEBUG:
                 if results == []:
@@ -107,12 +112,11 @@ class CameraScanner:
                     results = []
                 cv2.destroyAllWindows()
                 break
-        print(f"{results = }")
+        # print(f"{results = }")
         return results
 
-    
     # =====================================================================
-    #  Run
+    #  Main loop
     # =====================================================================
     def run(self) -> None:
         print("\nW = Wallet profile | G = Giftbox profile | B = Barcode Profile | Q = Stop frame | ESC = quit")
@@ -126,39 +130,11 @@ class CameraScanner:
                 try:
                     ret, frame = self.cap.read()
                 except cv2.error as e:
-                    logger.error(f"OpenCV error during capture.read(): {e}")
-                    # Attempt to recover by reinitializing the capture
-                    with self.camera_lock:
-                        try:
-                            idx = self.profile.camera_index
-                            try:
-                                self.cap.release()
-                            except Exception:
-                                pass
-                            time.sleep(0.2)
-                            try:
-                                self.cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-                            except Exception:
-                                self.cap = cv2.VideoCapture(idx)
-
-                            start = time.time()
-                            while not self.cap.isOpened() and (time.time() - start) < 3.0:
-                                time.sleep(0.1)
-
-                            if not self.cap.isOpened():
-                                logger.error(f"Reopened camera index {idx} failed")
-                                break
-
-                            # Apply profile settings and warm up
-                            try:
-                                self.__configure_camera()
-                            except Exception:
-                                pass
-                            self.__warmup_camera(frames=15)
-                            continue
-                        except Exception as e2:
-                            logger.error(f"Failed to reinitialize camera after cv2.error: {e2}")
-                            break
+                    # Try to recover the camera; if recovery fails, break loop
+                    if self.__recover_from_capture_error(e):
+                        continue
+                    else:
+                        break
                 
                 if self.rois:                
                     self.__draw_rois(frame)
@@ -170,7 +146,7 @@ class CameraScanner:
                     # Async decode
                     decoded = self.__decode_roi(ROI_frame) 
                     if decoded:
-                        if not self.Detected_all: 
+                        if not self.detected_all: 
                             self.__update_code(decoded)
                 else:
                     ROI_frame = None
@@ -185,36 +161,7 @@ class CameraScanner:
                         cv2.imshow("ROI", roi_bgr)
                             
                 key = cv2.waitKey(1) & 0xFF
-                # key = cv2.waitKey(1)
-                # if key != -1:
-                #     key &= 0xFF
-                    
-                if key == ord('W'):
-                    self.switch_profile(wallet_profile)
-                    
-                elif key == ord('G'):
-                    self.switch_profile(giftbox_profile)
-                    # Request ROI recalculation to be performed inside scanner thread
-                    self.request_roi_recalc = True
-                    
-                elif key == ord('B'):
-                    self.switch_profile(barcode_profile)
-                    
-                elif key == ord(' '):
-                    self.datamatrixes.append("")    
-                    self.__next_roi()
-                elif key == ord('f'):
-                    self.__adjust_camera_setting('focus', cv2.CAP_PROP_FOCUS, -1)
-                elif key == ord('g'):
-                    self.__adjust_camera_setting('focus', cv2.CAP_PROP_FOCUS, +1)
-                elif key == ord('e'):
-                    self.__adjust_camera_setting('exposure', cv2.CAP_PROP_EXPOSURE, -1)
-                elif key == ord('r'):
-                    self.__adjust_camera_setting('exposure', cv2.CAP_PROP_EXPOSURE, +1)
-                elif key == ord('b'):
-                    self.__adjust_camera_setting('brightness', cv2.CAP_PROP_BRIGHTNESS, -1)
-                elif key == ord('n'):
-                    self.__adjust_camera_setting('brightness', cv2.CAP_PROP_BRIGHTNESS, +1)
+                self.__handle_key(key)
                           
                 # If a ROI recalculation was requested by switch_profile(), do it here
                 if getattr(self, 'request_roi_recalc', False):
@@ -244,37 +191,57 @@ class CameraScanner:
             roi_text = f"ROI {self.current_roi_index + 1}/{len(self.rois)}"
             cv2.putText(frame, roi_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
 
+    def __handle_key(self, key: int) -> None:
+        """Process keyboard input from the capture loop."""
+        if key == ord('W'):
+            self.switch_profile(wallet_profile)
+        elif key == ord('G'):
+            self.switch_profile(giftbox_profile)
+            self.request_roi_recalc = True
+        elif key == ord('B'):
+            self.switch_profile(barcode_profile)
+        elif key == ord(' '):
+            self.datamatrixes.append("")    
+            self.__next_roi()
+        elif key == ord('f'):
+            self.__adjust_camera_setting('focus', cv2.CAP_PROP_FOCUS, -1)
+        elif key == ord('g'):
+            self.__adjust_camera_setting('focus', cv2.CAP_PROP_FOCUS, +1)
+        elif key == ord('e'):
+            self.__adjust_camera_setting('exposure', cv2.CAP_PROP_EXPOSURE, -1)
+        elif key == ord('r'):
+            self.__adjust_camera_setting('exposure', cv2.CAP_PROP_EXPOSURE, +1)
+        elif key == ord('b'):
+            self.__adjust_camera_setting('brightness', cv2.CAP_PROP_BRIGHTNESS, -1)
+        elif key == ord('n'):
+            self.__adjust_camera_setting('brightness', cv2.CAP_PROP_BRIGHTNESS, +1)
+            
     # =====================================================================
     #  Camera settings
-    # =====================================================================
-    def __cap_set(self, prop: int, value: float) -> None:
-        """Helper: safely set a camera property."""
-        
-        self.cap.set(prop, value)
-    
+    # =====================================================================    
     def __configure_camera(self) -> None: 
         """ Apply all camera settings from the profile (single source of truth."""
 
         # Resolution and autofocus (common to all profiles)
-        self.__cap_set(cv2.CAP_PROP_FRAME_WIDTH, 1280) # 640
-        self.__cap_set(cv2.CAP_PROP_FRAME_HEIGHT, 720) # 480
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280) # 640
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720) # 480
 
         if self.profile.focus is not None:
-            self.__cap_set(cv2.CAP_PROP_AUTOFOCUS, 0)  # Turn off auto focus
-            self.__cap_set(cv2.CAP_PROP_FOCUS, self.profile.focus)
+            self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # Turn off auto focus
+            self.cap.set(cv2.CAP_PROP_FOCUS, self.profile.focus)
         else:   
-            self.__cap_set(cv2.CAP_PROP_AUTOFOCUS, 1)  # Turn on auto focus
+            self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)  # Turn on auto focus
             
         if self.profile.exposure is not None:
-            self.__cap_set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Turn off auto exposure
-            self.__cap_set(cv2.CAP_PROP_EXPOSURE, self.profile.exposure)    
+            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Turn off auto exposure
+            self.cap.set(cv2.CAP_PROP_EXPOSURE, self.profile.exposure)    
         else:
-            self.__cap_set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)  # Turn on auto exposure
+            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)  # Turn on auto exposure
             
         if self.profile.brightness is not None:
-            self.__cap_set(cv2.CAP_PROP_BRIGHTNESS, self.profile.brightness)
+            self.cap.set(cv2.CAP_PROP_BRIGHTNESS, self.profile.brightness)
         else:
-            self.__cap_set(cv2.CAP_PROP_BRIGHTNESS, 100)  # Default brightness   
+            self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 100)  # Default brightness   
                     
     def __adjust_camera_setting(self, attr_name, cap_prop, delta) -> None:
         """Adjust a camera setting by delta and persist to profile."""
@@ -293,71 +260,45 @@ class CameraScanner:
             if not ret:
                 break
 
-    def __roi_frame_size(self, h,w, roi_box):
-        top, bottom, left, right = roi_box
-        # Clip bounds
-        top = max(0, min(top, h-1))
-        bottom = max(top+1, min(bottom, h))
-        left = max(0, min(left, w-1))
-        right = max(left+1, min(right, w-1))
-        return top, bottom, left, right
-    
-    def __draw_rois(self, frame) -> None:
-        """Read frame, clip ROI bounds, draw all ROIs, highlight current ROI, and preprocess."""
+    def __recover_from_capture_error(self, exc: Exception) -> bool:
+        """Attempt to safely reinitialize the camera after a cv2.error.
+
+        Returns True when recovery succeeded and the caller should continue the loop,
+        or False when recovery failed and the caller should break the loop.
+        """
+        logger.error(f"OpenCV error during capture.read(): {exc}")
         with self.camera_lock:
+            try:
+                idx = self.profile.camera_index
+                try:
+                    self.cap.release()
+                except Exception:
+                    pass
+                time.sleep(0.2)
+                try:
+                    self.cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+                except Exception:
+                    self.cap = cv2.VideoCapture(idx)
 
-            h, w = frame.shape[:2] 
-           
-            # Draw all ROIs in red
-            for i, roi_box in enumerate(self.rois): 
-                top, bottom, left, right = self.__roi_frame_size(h,w, roi_box)
-                
-                color = (0, 255, 0) if i == self.current_roi_index else (0, 0, 255) 
-                thickness = 3 if i == self.current_roi_index else 2 
-                cv2.rectangle(frame, (left, top), (right, bottom), color, thickness)
-            
-    def __process_frame(self, frame: MatLike) -> MatLike:
-        """Extract and convert current ROI to grayscale."""
-        top, bottom, left, right = self.__roi_frame_size(frame.shape[0], frame.shape[1], self.rois[self.current_roi_index % len(self.rois)])
-        roi = frame[top:bottom, left:right]
-        gray_roi = cv2.cvtColor(roi.astype("uint8"), cv2.COLOR_BGR2GRAY)
-        resized = cv2.resize(gray_roi, (0,0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
-        # Stretch contrast: lichtste pixel -> 255, donkerste pixel -> 0
-        norm = cv2.normalize(resized, resized, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                start = time.time()
+                while not self.cap.isOpened() and (time.time() - start) < 3.0:
+                    time.sleep(0.1)
 
-        if self.profile.scan_type == "barcode":
-            # Additional preprocessing for DataMatrix codes
-            norm = cv2.rotate(norm, cv2.ROTATE_90_COUNTERCLOCKWISE)
-            # contrast verbeteren (verscherpen)
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-            norm  = clahe.apply(norm)
-            
-        return norm
+                if not self.cap.isOpened():
+                    logger.error(f"Reopened camera index {idx} failed")
+                    return False
 
-    def __next_roi(self) -> None:
-        """Advance to next ROI in the profile."""
-        if len(self.rois) > 1:
-            self.current_roi_index = (self.current_roi_index + 1) % len(self.rois)
-             
-            time.sleep(0.05)  # Reduced from 0.2 for faster cycling
-            
-            # Clear the last code and flush decoder queues
-            self.last_code = ""
-            self.last_code_time = 0
-            self.roi_transition_time = time.time()  # Record transition time
-            
-            # Reset triple validation counters for new ROI
-            self.current_roi_consecutive_code = None
-            self.current_roi_consecutive_count = 0
-            
-            if self.dm_decoder is not None:
-                self.dm_decoder.flush_results()
-                self.dm_decoder.flush_input()
-                
-            logger.info(f"Advanced to ROI {self.current_roi_index + 1:>2}/{len(self.rois)}")
-                    
-        else:
-            logger.info("Single ROI profile - cannot advance")
+                # Apply profile settings and warm up
+                try:
+                    self.__configure_camera()
+                except Exception:
+                    pass
+                self.__warmup_camera(frames=15)
+                return True
+
+            except Exception as e2:
+                logger.error(f"Failed to reinitialize camera after cv2.error: {e2}")
+                return False
 
     # =====================================================================
     #  Change profile (and camera if needed)
@@ -371,19 +312,16 @@ class CameraScanner:
             self.__switch_camera(new_profile.camera_index)
             
         self.profile = new_profile
-        # self.rois = self.profile.rois # Reset ROIS
 
-        # Apply all profile settings (including ROI) in one place
+        # Apply all profile settings (including ROI) in one place and log the change
         self.__configure_camera()
-
-        # Log the change
-        self.__log_profile_settings()
+        self.__log_profile_settings(self.profile)
         
         # Reset flags and counters
         self.current_roi_index = 0
         self.current_roi_consecutive_code = None
         self.current_roi_consecutive_count = 0
-        self.Detected_all = False 
+        self.detected_all = False 
         self.switch = False        
 
         # Flush decoder queues after camera hardware switch
@@ -394,18 +332,14 @@ class CameraScanner:
             except Exception:
                 pass
 
-        # If GiftBox (or similar) profile selected, request ROI recalculation
-        try:
-            profile_name = getattr(self.profile, 'name', '').lower()
-            if self.profile is giftbox_profile or 'gift' in profile_name:
-                # do not run GUI/ROI detection here (may be called from another thread)
+        try: # If GiftBox profile selected, request ROI recalculation
+            if self.profile is giftbox_profile:
                 self.request_roi_recalc = True
             else:
                 self.rois = self.profile.rois
         except Exception:
             pass
-
-        
+       
     def __switch_camera(self, new_index: int):
         """Safely release old camera and open a new one by index."""
         with self.camera_lock:
@@ -490,26 +424,98 @@ class CameraScanner:
                 pass
             self.__warmup_camera(frames=5)
 
-    def __log_profile_settings(self) -> None: 
+    @staticmethod
+    def __log_profile_settings(profile) -> None: 
         """
             Prints the current profile settings to the console.
             Name, type, index, focus, exposure, brightness.
         """
         # Log the change
         print("\n================================")
-        print(f"[PROFILE] Switched to {self.profile.name} ({self.profile.scan_type})")
-        print(f" Index      → {self.profile.camera_index}")
-        print(f" Focus      → {self.profile.focus}")
-        print(f" Exposure   → {self.profile.exposure}")
-        print(f" Brightness → {self.profile.brightness}")
+        print(f"[PROFILE] Switched to {profile.name} ({profile.scan_type})")
+        print(f" Index      → {profile.camera_index}")
+        print(f" Focus      → {profile.focus}")
+        print(f" Exposure   → {profile.exposure}")
+        print(f" Brightness → {profile.brightness}")
         print("================================\n")
-                    
+        
     # ==============================================================
-    # Decoders (per profile)
+    # Roi handling
+    # ==============================================================
+    @staticmethod
+    def __roi_frame_size(h,w, roi_box):
+        top, bottom, left, right = roi_box
+        # Clip bounds
+        top = max(0, min(top, h-1))
+        bottom = max(top+1, min(bottom, h))
+        left = max(0, min(left, w-1))
+        right = max(left+1, min(right, w-1))
+        return top, bottom, left, right
+    
+    def __draw_rois(self, frame) -> None:
+        """Read frame, clip ROI bounds, draw all ROIs, highlight current ROI, and preprocess."""
+        with self.camera_lock:
+
+            h, w = frame.shape[:2] 
+           
+            # Draw all ROIs in red
+            for i, roi_box in enumerate(self.rois): 
+                top, bottom, left, right = self.__roi_frame_size(h,w, roi_box)
+                
+                color = (0, 255, 0) if i == self.current_roi_index else (0, 0, 255) 
+                thickness = 3 if i == self.current_roi_index else 2 
+                cv2.rectangle(frame, (left, top), (right, bottom), color, thickness)
+            
+    def __process_frame(self, frame: MatLike) -> MatLike:
+        """Extract and convert current ROI to grayscale."""
+        top, bottom, left, right = self.__roi_frame_size(frame.shape[0], frame.shape[1], self.rois[self.current_roi_index % len(self.rois)])
+        roi = frame[top:bottom, left:right]
+        gray_roi = cv2.cvtColor(roi.astype("uint8"), cv2.COLOR_BGR2GRAY)
+        resized = cv2.resize(gray_roi, (0,0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        # Stretch contrast: lichtste pixel -> 255, donkerste pixel -> 0
+        norm = cv2.normalize(resized, resized, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+        if self.profile.scan_type == "barcode":
+            # Additional preprocessing for DataMatrix codes
+            norm = cv2.rotate(norm, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            # contrast verbeteren (verscherpen)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            norm  = clahe.apply(norm)
+            
+        return norm
+
+    def __next_roi(self) -> None:
+        """Advance to next ROI in the profile."""
+        if len(self.rois) > 1:
+            self.current_roi_index = (self.current_roi_index + 1) % len(self.rois)
+             
+            time.sleep(0.05)  # Reduced from 0.2 for faster cycling
+            
+            # Clear the last code and flush decoder queues
+            self.last_code = ""
+            self.last_code_time = 0
+            self.roi_transition_time = time.time()  # Record transition time
+            
+            # Reset triple validation counters for new ROI
+            self.current_roi_consecutive_code = None
+            self.current_roi_consecutive_count = 0
+            
+            if self.dm_decoder is not None:
+                self.dm_decoder.flush_results()
+                self.dm_decoder.flush_input()
+                
+            logger.info(f"Advanced to ROI {self.current_roi_index + 1:>2}/{len(self.rois)}")
+                    
+        else:
+            logger.info("Single ROI profile - cannot advance")
+           
+    # ==============================================================
+    # Decoders (per profile) and update code
     # ==============================================================
     def __decode_roi(self, ROI_frame):
         # --- DataMatrix profiles ---
         if self.profile.scan_type == "datamatrix":
+            #! Remove?
             # Only feed frames to decoder if we've been on this ROI for >100ms
             if time.time() - self.roi_transition_time > 0.1:
                 self.dm_decoder.dm_decoder_async(ROI_frame) 
@@ -528,36 +534,28 @@ class CameraScanner:
     def __update_code(self, code: str) -> None:
         current_time = time.time()
         
-        # ==================================================
-        # Check new code
-        # ==================================================           
-        # last_detection_time = self.roi_detection_times.get(self.current_roi_index, 0)
-        
-        # Same code as before: increments counter; Different code detected: resets counter
+        # Increments counter when same code as before; Resets counter when different code detected
         if code == self.current_roi_consecutive_code: 
             self.current_roi_consecutive_count += 1 
         else: 
             self.current_roi_consecutive_code = code
             self.current_roi_consecutive_count = 1
         
-        # ==================================================
-        # Execute when 3 times the same code
-        # ==================================================           
-        if self.current_roi_consecutive_count >= 3 and (current_time - self.roi_transition_time > 0.3): #! Change this time if needed 
+        # Accept code only after triple validation
+        if self.current_roi_consecutive_count >= 3: # and (current_time - self.roi_transition_time > 0.3): #! Change this time if needed 
             self.last_code = code
             self.last_code_time = current_time
-            # Record detection time for this ROI
-            # self.roi_detection_times[self.current_roi_index] = current_time
             
+            total_rois = len(self.rois)
             # Log with ROI info if multi-ROI profile
-            if len(self.rois) > 1:
-                logger.info(f"DECODE [ROI {self.current_roi_index + 1:>2}/{len(self.rois)}] = {code}")
+            if total_rois > 1:
+                logger.info(f"DECODE [ROI {self.current_roi_index + 1:>2}/{total_rois}] = {code}")
                 self.datamatrixes.append(code)
                 
-                # Auto-advance to next ROI after successful decode
-                if len(self.rois) == (self.current_roi_index + 1):
+                # Auto-advance to next ROI after successful decode, stop when all detected
+                if (self.current_roi_index + 1) == total_rois:
                     print("All Detected")
-                    self.Detected_all = True
+                    self.detected_all = True
                     self.rois = self.profile.rois # Reset ROIS
                     self.current_roi_index = 0
                 else:
@@ -578,6 +576,10 @@ class CameraScanner:
             if elapsed > (self.profile.data_timeout or 0):
                 logger.info(f"Code expired: {self.last_code}")
                 self.last_code = ""
+
+    # ==============================================================
+    # Others
+    # ==============================================================
 
     # Bastiaan waarom heb ik deze methode?
     def update_state(self, state: str) -> str:
