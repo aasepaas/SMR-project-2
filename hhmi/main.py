@@ -4,10 +4,17 @@ from mainwindow import mainWindow
 import time
 from threading import Event
 import sys
-
 import csv 
 
-from scanner import *
+import time
+import threading
+from multiprocessing import Process, Queue
+
+from camera_scanner import CameraScanner
+from datamatrix_decoder import DataMatrixDecoder
+from roi_auto_detector import ROIAutoDetector
+from profile_setup import wallet_profile, giftbox_profile, barcode_profile
+
 from databaserun import DatabaseRun
 from NetworkClient import Network_client
 import threading
@@ -24,25 +31,34 @@ class Worker(QObject):
     update_status = Signal(str)
     enable_start = Signal(bool)
     update_box_status = Signal(int, str)
-    scan_finished = Signal(bool)  # resultaat van de scan (True = OK)
+    scan_finished = Signal(bool)
 
-    def __init__(self, error_event, start_event, scan_event, done_event):
+    def __init__(self, error_event, start_event, scan_event, done_event, net_client):
         super().__init__()
-        self.start_event = start_event      # threading.Event gedeeld tussen threads
-        self.scan_event = scan_event        # Event om een scan te triggeren
+        self.start_event = start_event
+        self.scan_event = scan_event
         self.restart_flag = False
         self.error_event = error_event
         self.done_event = done_event
+        self.net_client = net_client 
 
     def restart_triggered(self):
         print("Worker received restart signal")
         self.restart_flag = True
+        # Clear alle events zodat de worker opnieuw kan starten
+        if self.error_event.is_set():
+            self.error_event.clear()
+        if self.done_event.is_set():
+            self.done_event.clear()
+        # Forceer socket disconnect om blocking receive te stoppen
+        self.net_client.disconnect_client()
+        self.net_client.clse_socket()
 
     def run(self):
         timer = 0.4
-        ####profiles aanmaken
+        # [Profile setup code blijft hetzelfde...]
+        
         # Wallet profile
-        top1, left1 = 525, 800
         top1, left1 = 100, 100
         bottom1, right1 = top1 + 100, left1 + 100
         wallet_profile = ScanProfile(
@@ -55,10 +71,7 @@ class Worker(QObject):
             data_timeout=0.5
         )
 
-
-
         # Giftbox profile
-        top2, left2 = 300, 800
         top2, left2 = 150, 150
         bottom2, right2 = top2 + 150, left2 + 150
         giftbox_profile = ScanProfile(
@@ -71,19 +84,7 @@ class Worker(QObject):
             data_timeout=0.5
         )
 
-        '''# Giftbox profile (single ROI)
-        giftbox_profile = ScanProfile(
-            name="GiftBox",
-            camera_index=0,
-            roi=Giftbox_results,  # Pass as list
-            focus=120,
-            exposure=-1,
-            brightness=100,
-            data_timeout=0.5
-        )'''
-
         # Barcode profile
-        top3, left3 = 300, 1250
         top3, left3 = 200, 200
         bottom3, right3 = top3 + 150, left3 + 300
         barcode_profile = ScanProfile(
@@ -106,195 +107,187 @@ class Worker(QObject):
 
         scan_thread = threading.Thread(
             target=scanner.run, 
-            # args=(wallet_profile, giftbox_profile, barcode_profile),
             daemon=True
-            )
+        )
         scan_thread.start()
 
-        client_socket = Network_client('127.0.0.1', 5000)
-        client_socket.strt_socket()
-        client_socket.connect_client()
+        
         status = StatusControl()
         db = DatabaseRun()
 
         while True:
-            # 1) Als er een scan-request is, voer die uit en meld resultaat terug.
+            # Check restart flag aan het begin van de main loop
+            if self.restart_flag:
+                print("Worker: restart flag detected at main loop start")
+                self.restart_flag = False
+                # Clear start_event zodat we niet automatisch weer starten
+                if self.start_event.is_set():
+                    self.start_event.clear()
+                # Heropen socket voor volgende run
+                time.sleep(0.5)  # Korte delay
+                self.net_client.strt_socket()
+                print("Worker: restart completed, ready for new scan")
+                continue
+
+            # Scan event handling
+            ##verander start socket logica
             scanner.switch_profile("barcode")
             if self.scan_event.is_set():
                 print("Worker: scan gestart...")
                 result = scanner.get_code()
+                connected = self.net_client.connect_client()
+                #    print("asdajshdjkajksdasd")
+                if not connected:
+                    print("Worker: connect_client failed")
+                    if self.start_event.is_set():
+                        self.start_event.clear()
+                    continue
                 self.scan_event.clear()
                 self.scan_finished.emit(True)
-                '''if result is not None:
-                    print(f"Worker: scan klaar, resultaat={result}")
-                    # clear request en emit resultaat
-                    self.scan_event.clear()
-                    self.scan_finished.emit(True)
-                    # ga terug naar top van loop om verdere requests te verwerken
-                    #time.sleep(10000)
-                    continue'''
-            # 2) Als start_event is gezet, voer de hoofd-loop uit
+
+            # Start event handling
             if self.start_event.is_set():
                 print("Worker: start geaccepteerd, nu begint de loop!")
-                client_socket.send_client("start!")
-                # verwerk elke wallet sequentieel (current -> succes/unsuccessful)
+                self.net_client.send_client("start")
                 i = 1
                 box_ID = None
                 boxValue = False
                 stop_run = False
                 batchCompleted = False
                 total_wallets = len(window.page2.wallet_statusbox)
-                while True:
-                    ##new code
-      
-                    while not batchCompleted:
-                        cmd = client_socket.receive_client()
+
+                # Main processing loop
+                while not batchCompleted:
+                    # Check restart EERST
+                    if self.restart_flag:
+                        print("Worker: restart detected in batch loop, breaking")
+                        stop_run = True
+                        break
+                    
+                    # Check error/done events
+                    if self.error_event.is_set() or self.done_event.is_set():
+                        print(f"Worker: error/done event detected at wallet {i}")
+                        stop_run = True
+                        break
+                    
+                    # Check if batch complete
+                    if i > total_wallets:
+                        print("Worker: batch completed")
+                        batchCompleted = True
+                        break
+
+                    # Receive command (dit kan blocken!)
+                    try:
+                        cmd = self.net_client.receive_client()
                         if cmd is None:
-                            print("Client disconnected.")
+                            print("Worker: client disconnected")
+                            stop_run = True
                             break
-                    
-                        print(f"COMMAND: {cmd}")
-
-                        if cmd not in CMD_TO_STATE:
-                            print(f"Unknown command: {cmd}")
-                            continue
-
-                        for event_key, state in CMD_TO_STATE.items():
-                            if state == CMD_TO_STATE[cmd]:
-                                event = event_key
-                                break
-                        if not event:
-                            print(f"No matching event for command {cmd}")
-                            continue
-
-                        print(f"event: {event}")
-                        current_state = status.run(event)
-                        print(f" new state: {current_state}")
-
-                        ##new code bastiaan
-                    
-                        if current_state == SMNState.SEND_GIFTBOX_COORDINATES:
-                            print("SEND_GIFTBOX_COORDINATES")
-                            client_socket.send_client("GIFTBOX")
-                            self.update_box_status.emit(i, "current")
-                            # #
-                        if current_state == SMNState.IDLE:
-                            print("idle")
-                            # #
-                        if current_state == SMNState.SCANNING_GIFTBOX:
-                            print("SCANNING_GIFTBOX")
-                            scanner.switch_profile("giftbox")
-                            print("Worker: giftbox scan gestart")
-                            client_socket.send_client("SCAN_giftbox")
-                            scannotDone = True
-                            while scannotDone:
-                                #box_ID = scanner.get_code()
-                                box_ID = 1
-                                if box_ID is not None:
-                                    print(f"Worker: scan klaar, resultaat={box_ID}")
-                                    #db.buffer = box_ID
-                                    db.bbuffer = "FK19T-0L3N-R8H6"
-                                    checkWaarde = db.send_data(current_state)
-                                    #check met if statement of hij in de database gevonden is of niet
-                                    if checkWaarde:
-                                        print("goed waarde bestaat")
-                                        scannotDone = False
-                                        boxValue = True
-                                    else:
-                                        print("false waarde bestaat niet")
-                                        scannotDone = False
-                                        boxValue = False
-                                    continue
-
-                        if current_state == SMNState.SEND_WALLET_COORDINATES:
-                            print("SEND_WALLET_COORDINATES")
-                            client_socket.send_client("WALLET")
-                            # #
-
-                        if current_state == SMNState.SCANNING_WALLET:
-                            print("SCANNING_WALLET")
-                            scanner.switch_profile("wallet")
-                            print("Worker: giftbox scan gestart")
-                            client_socket.send_client("SCAN_wALLT")
-                            scannotDone = True
-                            while scannotDone:
-                                #wallet_ID = scanner.get_code()
-                                wallet_ID = 1
-                                if wallet_ID is not None:
-                                    print(f"Worker: scan klaar, resultaat={wallet_ID}")
-                                    #db.ibuffer = wallet_ID
-                                    db.ibuffer = "QH82M-9D5Z-B7X1"
-                                    checkWaarde = db.send_data(SMNState.SCANNING_WALLET)
-                                    if checkWaarde:
-                                        print("goed waarde bestaat")
-                                        scannotDone = False
-                                        boxValue = True 
-                                    else:
-                                        print("false waarde bestaat niet")
-                                        scannotDone = False
-                                        boxValue = False
-                                    continue
-                        if current_state == SMNState.SWITCH_CAMERA:
-                            print("SWITCH_CAMERA")
-                        if current_state == SMNState.PROCESSING:
-                            print("PROCESSING")
-                            # #
-                        if current_state == SMNState.ERROR:
-                            print("ERROR")
-                            # #
-                        if current_state == SMNState.DONE_CYCLE:
-                            client_socket.send_client("DONECYCLE")
-                            if boxValue:
-                                self.update_box_status.emit(i, "succes")
-                            else:
-                                self.update_box_status.emit(i, "unsuccessful") 
-                            if self.error_event.is_set() or self.done_event.is_set():
-                                print(f"Worker: error/done event gedetecteerd tijdens unsuccessful bij index {i}, stoppen")
-                                stop_run = True
-                                break
-                            print("DONE_CYCLE")
-                            i += 1
-
+                    except Exception as e:
+                        print(f"Worker: receive error: {e}")
+                        # Waarschijnlijk socket gesloten door restart
                         if self.restart_flag:
-                            print("Worker: restart gedetecteerd, break")
-                            self.restart_flag = False
+                            print("Worker: receive interrupted by restart")
                             stop_run = True
                             break
+                        continue
+                    
+                    print(f"COMMAND: {cmd}")
+
+                    if cmd not in CMD_TO_STATE:
+                        print(f"Unknown command: {cmd}")
+                        continue
+
+                    # Determine event from command
+                    event = None
+                    for event_key, state in CMD_TO_STATE.items():
+                        if state == CMD_TO_STATE[cmd]:
+                            event = event_key
+                            break
+                    
+                    if not event:
+                        print(f"No matching event for command {cmd}")
+                        continue
+
+                    print(f"event: {event}")
+                    current_state = status.run(event)
+                    print(f"new state: {current_state}")
+
+                    # State handling
+                    if current_state == SMNState.SEND_GIFTBOX_COORDINATES:
+                        print("SEND_GIFTBOX_COORDINATES")
+                        self.net_client.send_client("GIFTBOX")
+                        self.update_box_status.emit(i, "current")
                         
-                        if i == (total_wallets+1):
+                    elif current_state == SMNState.SCANNING_GIFTBOX:
+                        print("SCANNING_GIFTBOX")
+                        scanner.switch_profile("giftbox")
+                        self.net_client.send_client("SCAN_giftbox")
+                        
+                        box_ID = 1  # Mock scan
+                        db.bbuffer = "FK19T-0L3N-R8H6"
+                        checkWaarde = db.send_data(current_state)
+                        boxValue = checkWaarde
+                        
+                        if checkWaarde:
+                            print("Box ID validated")
+                        else:
+                            print("Box ID validation failed")
+                            
+                    elif current_state == SMNState.SEND_WALLET_COORDINATES:
+                        print("SEND_WALLET_COORDINATES")
+                        self.net_client.send_client("WALLET")
+                        
+                    elif current_state == SMNState.SCANNING_WALLET:
+                        print("SCANNING_WALLET")
+                        scanner.switch_profile("wallet")
+                        self.net_client.send_client("SCAN_wALLT")
+                        
+                        wallet_ID = 1  # Mock scan
+                        db.ibuffer = "QH82M-9D5Z-B7X1"
+                        db.bbuffer = "FK19T-0L3N-R8H6"
+                        checkWaarde = db.send_data(SMNState.SCANNING_WALLET)
+                        boxValue = checkWaarde
+                        
+                        if checkWaarde:
+                            print("Wallet ID validated")
+                        else:
+                            print("Wallet ID validation failed")
+                            
+                    elif current_state == SMNState.DONE_CYCLE:
+                        print("DONE_CYCLE")
+                        self.net_client.send_client("DONECYCLE")
+                        
+                        if boxValue:
+                            self.update_box_status.emit(i, "succes")
+                        else:
+                            self.update_box_status.emit(i, "unsuccessful")
+                        
+                        # Check restart/error/done NA status update
+                        if self.restart_flag or self.error_event.is_set() or self.done_event.is_set():
+                            print(f"Worker: stopping after wallet {i} status update")
                             stop_run = True
-                            batchCompleted = True
                             break
-
-                        # controleer opnieuw direct na statuswijziging
-                        if self.error_event.is_set() or self.done_event.is_set():
-                            print(f"Worker: error/done event gedetecteerd tijdens unsuccessful bij index {i}, stoppen")
-                            stop_run = True
-                            break
-
-                    if stop_run:
-                        print("Worker: stoppen main loop vanwege stop_run-flag")
+                            
+                        i += 1
+                        
+                    elif current_state == SMNState.ERROR:
+                        print("ERROR STATE")
+                        stop_run = True
                         break
 
-                    # controleer nogmaals of er tijdens de volle iteratie een error/done is gezet
-                    if self.error_event.is_set():
-                        print("Worker: error_event na volledige iteratie gedetecteerd")
-                        break
-                    if self.done_event.is_set():
-                        print("Worker: done_event na volledige iteratie gedetecteerd")
-                        break
-
-                    # einde run of vroegtijdig door error/restart — clear start_event zodat we niet meteen opnieuw beginnen
+                # Na batch loop - cleanup
+                print("Worker: exited batch loop")
                 if self.start_event.is_set():
                     self.start_event.clear()
-
-                    # optionele status update naar GUI dat run klaar is
-                    #self.update_status.emit("Status: Run klaar. Druk Start Scan voor nieuwe scan of Start voor run.")
+                
+                # Disconnect client
+                self.net_client.disconnect_client()
+                
                 continue
 
-            # geen scan en geen start => korte sleep en blijf luisteren
+            # Geen scan en geen start => korte sleep
             time.sleep(0.05)
-
 
 def main():
     global window
@@ -311,9 +304,12 @@ def main():
     done_event = Event()
     window.page2.set_done_event(done_event)
 
+    client_socket = Network_client('127.0.0.1', 5000)
+    client_socket.strt_socket()
+
     # Thread aanmaken
     thread = QThread()
-    worker = Worker(error_event, start_event, scan_event, done_event)
+    worker = Worker(error_event, start_event, scan_event, done_event, client_socket)
     worker.moveToThread(thread)
 
     # geef event ook door aan page2 zodat page2 het kan set/clear
@@ -347,8 +343,13 @@ def main():
 
     window.page1.scan_requested.connect(trigger_scan)
 
+    def on_restart_requested():
+        print("Main: restart requested — closing network sockets to unblock worker")
+        worker.restart_triggered()
+ 
+
     # worker restart
-    window.page2.restart_requested.connect(worker.restart_triggered)
+    window.page2.restart_requested.connect(on_restart_requested)
 
     # START THREAD NU DIRECT zodat worker reageert op Start Scan ook op Page1
     thread.started.connect(worker.run)
