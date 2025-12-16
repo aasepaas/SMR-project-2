@@ -12,15 +12,16 @@ class ScanProfile:
         self.scan_type = scan_type # "datamatrix" or "barcode"
         self.rois = rois
 
-Wallet_Camera_Index = 0
+Wallet_Camera_Index = 1
 Giftbox_Camera_Index = 1
 Barcode_Camera_Index = 1
 
-carton_box_focus = 85
+carton_box_focus = 80
 
 # Standard profile
 standard_profile = ScanProfile(
     name="Standard",
+    camera_index = Wallet_Camera_Index,
     data_timeout=0.5,
     scan_type="datamatrix",
 )
@@ -29,12 +30,12 @@ standard_profile = ScanProfile(
 wallet_profile = ScanProfile(
     name="Wallet",
     camera_index = Wallet_Camera_Index,
-    focus=175,
-    exposure=-5,
-    brightness=100,
+    focus=160,
+    # exposure=-5,
+    # brightness=100,
     data_timeout=0.5,
     scan_type="datamatrix",
-    rois=[(0, 200, 100, 300)] # top, bottom, left, right
+    rois=[(500, 650, 925, 1075)] # top, bottom, left, right
 )
 
 # Giftbox profile 
@@ -42,7 +43,7 @@ giftbox_profile = ScanProfile(
     name="GiftBox",
     camera_index=Giftbox_Camera_Index,
     focus=carton_box_focus,
-    exposure=-6, # 0 of -6! THUIS 0
+    exposure=-9, # 0 of -6! THUIS 0
     brightness=195, # 200 of 195! THUIS 195
     # exposure=-6, # 0 of -6!
     # brightness=195, # 200 of 195!

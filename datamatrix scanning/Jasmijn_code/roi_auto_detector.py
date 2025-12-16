@@ -33,10 +33,12 @@ class ROIAutoDetector:
         # print("Connected Components found:", num_labels - 1)
         for label in range (1, num_labels):
             area = stats[label, cv2.CC_STAT_AREA]
-            # print("area:", area)
+            # msg = f"Fijne filter area: {area}" if squareness == 1 else f"Groffe filter area: {area}"
+            # print(msg)
+
             if area >= Max_area or area <= Min_area: # Verwijder kleine ruis
                 continue
-            # print(f"{num_labels} area: {area}")
+            
             x, y, w, h = stats[label, cv2.CC_STAT_LEFT], stats[label, cv2.CC_STAT_TOP], stats[label, cv2.CC_STAT_WIDTH], stats[label, cv2.CC_STAT_HEIGHT]
             points.append((x, y, w, h))
             
@@ -69,10 +71,19 @@ class ROIAutoDetector:
         # thresholding
         _, th2 = cv2.threshold(blur, 185, 255, cv2.THRESH_BINARY)        
         if self.debug_process: 
-            cv2.imshow("Threshold blur", th2)
+            cv2.imshow("Threshold blur 185", th2)
+        _, th3 = cv2.threshold(blur, 185+15, 255, cv2.THRESH_BINARY)        
+        if self.debug_process: 
+            cv2.imshow("Threshold blur 200", th3)
+        _, th4 = cv2.threshold(blur, 185+30, 255, cv2.THRESH_BINARY)        
+        if self.debug_process: 
+            cv2.imshow("Threshold blur 215", th4)
+        _, th5 = cv2.threshold(blur, 185+35, 255, cv2.THRESH_BINARY)        
+        if self.debug_process: 
+            cv2.imshow("Threshold blur 220", th5)
 
         # Groffe filtering met connected components
-        Groffe_filter, _ = self.__connected_components_filtering(th2, Min_area=100, Max_area=500_000, squareness=15, connect=4)                    
+        Groffe_filter, _ = self.__connected_components_filtering(th4, Min_area=100, Max_area=40_000, squareness=15, connect=4)                    
         if self.debug_process: 
             cv2.imshow("Groffe_filter", Groffe_filter)
 
@@ -158,7 +169,7 @@ class ROIAutoDetector:
             return []
         
         
-        DBSfilter = DBSCANFiltering(data=centers_list, eps=50, min_samples=5)
+        DBSfilter = DBSCANFiltering(data=centers_list, eps=30, min_samples=5)
         valid_indices, labels  = DBSfilter.get_filtered_indices()
         fig = DBSfilter.visualize_dbscan_results(labels)
         DBSCANFiltering.fig_to_cv2(fig)
@@ -183,7 +194,7 @@ class ROIAutoDetector:
             # =========================================================
             #  Draw all the information
             # =========================================================
-            label = str((cX, cY))
+            label = str((int(cX), int(cY)))
             textbox = (cX, cY - 45) # 25
 
             cv2.rectangle(th, (x, y), (x + cw, y + ch), (128), 2)
@@ -310,7 +321,11 @@ class ROIAutoDetector:
         
         
 if __name__ == "__main__":
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
+    # Resolution and autofocus 
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280) # 640
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720) # 480
+
     button = "c"
     detector1 = ROIAutoDetector(DEBUG=True, DEBUGPROCESS=True, recalc=button)
     results = []

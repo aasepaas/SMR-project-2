@@ -5,7 +5,7 @@ import time
 import datetime
 import logging
 import threading
-
+import numpy as np
 import cv2
 from cv2.typing import MatLike
 from pyzbar.pyzbar import decode as qr_decoder
@@ -471,17 +471,38 @@ class CameraScanner:
         top, bottom, left, right = self.__roi_frame_size(frame.shape[0], frame.shape[1], self.rois[self.current_roi_index % len(self.rois)])
         roi = frame[top:bottom, left:right]
         gray_roi = cv2.cvtColor(roi.astype("uint8"), cv2.COLOR_BGR2GRAY)
-        resized = cv2.resize(gray_roi, (0,0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
-        # Stretch contrast: lichtste pixel -> 255, donkerste pixel -> 0
-        norm = cv2.normalize(resized, resized, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-
+        
+        # check min and max values
+        # min_val = np.min(norm)
+        # max_val = np.max(norm)
+        # print(f"Min: {min_val}, Max: {max_val}")
+        
+        # th = cv2.threshold(norm, 110, 255, cv2.THRESH_BINARY)[1]
+        # th2 = cv2.threshold(norm, 100, 255, cv2.THRESH_BINARY)[1]
+        # th3 = cv2.threshold(norm, 105, 255, cv2.THRESH_BINARY)[1]
+        # th4 = cv2.threshold(norm, 95, 255, cv2.THRESH_BINARY)[1]
+        # cv2.imshow("1 Threshold 1", th)
+        # cv2.imshow("2 Threshold 2", th2)
+        # cv2.imshow("3 Threshold 3", th3)
+        # cv2.imshow("4 Threshold 4", th4)
+        
+        # im_v = cv2.hconcat([th, th2, th3, th4])
+        # cv2.imshow("All Thresholds", im_v)
+        
+        if self.profile.scan_type == "giftbox":
+            resized = cv2.resize(gray_roi, (0,0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+            
+            # Stretch contrast: lichtste pixel -> 255, donkerste pixel -> 0
+            norm = cv2.normalize(resized, resized, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)       
+        else:
+            norm = cv2.normalize(gray_roi, gray_roi, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)      
         if self.profile.scan_type == "barcode":
             # Additional preprocessing for DataMatrix codes
             norm = cv2.rotate(norm, cv2.ROTATE_90_COUNTERCLOCKWISE)
             # contrast verbeteren (verscherpen)
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
             norm  = clahe.apply(norm)
-            
+                
         return norm
 
     def __next_roi(self) -> None:
