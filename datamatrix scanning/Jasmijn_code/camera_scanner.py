@@ -53,6 +53,7 @@ class CameraScanner:
         self.camera_lock = threading.Lock()
         self.running: bool = True
         self.detected_all: bool = False
+        self.detected_one: bool = False
         self.request_roi_recalc: bool = False
         self.switch: bool = False        
         self.datamatrixes: list = [] # Stores detected datamatrix codes
@@ -477,17 +478,6 @@ class CameraScanner:
         # max_val = np.max(norm)
         # print(f"Min: {min_val}, Max: {max_val}")
         
-        # th = cv2.threshold(norm, 110, 255, cv2.THRESH_BINARY)[1]
-        # th2 = cv2.threshold(norm, 100, 255, cv2.THRESH_BINARY)[1]
-        # th3 = cv2.threshold(norm, 105, 255, cv2.THRESH_BINARY)[1]
-        # th4 = cv2.threshold(norm, 95, 255, cv2.THRESH_BINARY)[1]
-        # cv2.imshow("1 Threshold 1", th)
-        # cv2.imshow("2 Threshold 2", th2)
-        # cv2.imshow("3 Threshold 3", th3)
-        # cv2.imshow("4 Threshold 4", th4)
-        
-        # im_v = cv2.hconcat([th, th2, th3, th4])
-        # cv2.imshow("All Thresholds", im_v)
         
         if self.profile.scan_type == "giftbox":
             resized = cv2.resize(gray_roi, (0,0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
@@ -502,6 +492,14 @@ class CameraScanner:
             # contrast verbeteren (verscherpen)
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
             norm  = clahe.apply(norm)
+
+        th = cv2.threshold(norm, 110, 255, cv2.THRESH_BINARY)[1]
+        th2 = cv2.threshold(norm, 100, 255, cv2.THRESH_BINARY)[1]
+        th3 = cv2.threshold(norm, 105, 255, cv2.THRESH_BINARY)[1]
+        th4 = cv2.threshold(norm, 95, 255, cv2.THRESH_BINARY)[1]
+        
+        im_v = cv2.hconcat([th, th2, th3, th4])
+        cv2.imshow("All Thresholds", im_v)
                 
         return norm
 
@@ -536,10 +534,11 @@ class CameraScanner:
     def __decode_roi(self, ROI_frame):
         # --- DataMatrix profiles ---
         if self.profile.scan_type == "datamatrix":
-            #! Remove?
+            # #! Remove?
             # Only feed frames to decoder if we've been on this ROI for >100ms
             if time.time() - self.roi_transition_time > 0.1:
                 self.dm_decoder.dm_decoder_async(ROI_frame) 
+            # self.dm_decoder.dm_decoder_async(ROI_frame) 
             
             result = self.dm_decoder.get_result()
             str_result = str(result.data.decode("utf-8")) if result else ""
@@ -554,16 +553,20 @@ class CameraScanner:
 
     def __update_code(self, code: str) -> None:
         current_time = time.time()
+        self.detected_one = False
         
         # Increments counter when same code as before; Resets counter when different code detected
         if code == self.current_roi_consecutive_code: 
             self.current_roi_consecutive_count += 1 
+            # logger.info("Test current_roi_consecutive_count updated {}".format(self.current_roi_consecutive_count))
         else: 
             self.current_roi_consecutive_code = code
             self.current_roi_consecutive_count = 1
+            # logger.info("Test current_roi_consecutive_count reset {}".format(self.current_roi_consecutive_count))
         
         # Accept code only after triple validation
-        if self.current_roi_consecutive_count >= 3: # and (current_time - self.roi_transition_time > 0.3): #! Change this time if needed 
+        if self.current_roi_consecutive_count >= self.profile.validate_n_times: # and (current_time - self.roi_transition_time > 0.3): #! Change this time if needed 
+            # logger.info("Test current_roi_consecutive_count reached {}".format(self.current_roi_consecutive_count))
             self.last_code = code
             self.last_code_time = current_time
             
@@ -583,8 +586,10 @@ class CameraScanner:
                     self.__next_roi()
 
             else:
+                self.detected_one = True
                 logger.info(f"DECODE = {code}")
-                self.datamatrixes.append(code)
+                # self.datamatrix = code
+                # self.datamatrixes.append(code)
                 
             # Reset triple validation for next code
             self.current_roi_consecutive_code = None
@@ -611,11 +616,21 @@ class CameraScanner:
         return self.state
     
     # Gebruik deze methode voor het ophalen van de laatste code   
-    def get_code(self) -> list[str]:
-        if self.datamatrixes != []:
-            return self.datamatrixes
+    def get_code(self) -> list[str] | str | None:
+        if self.profile.name == "GiftBox":
+            if self.detected_all:
+                self.detected_all = False
+                return self.datamatrixes
+            else:
+                return None
         else:
-            raise NotImplementedError("No code available")
+            if self.detected_one: 
+                self.detected_one = False
+                return self.last_code
+            else:
+                return None
+
+            # raise NotImplementedError("No code available")
     
     # =====================================================================
     #  Shutdown

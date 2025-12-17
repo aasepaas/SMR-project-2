@@ -60,24 +60,54 @@ def run_thread_match_case(scanner, state=0):
         match state:
             case 0:
                 time.sleep(2) 
-                state = 1
+                state = 3
             case 1:
                 if First:
                     scanner.switch_profile(giftbox_profile)
                     First = False
-                if scanner.detected_all:
-                    print(f"All {len(scanner.get_code())} codes detected {scanner.get_code() = }")
+                result = scanner.get_code()
+                if result:
+                    print(f"Code detected {result = }")
                     First = True
                     state = 2
+                # if scanner.detected_all:
+                #     print(f"All {len(scanner.get_code())} codes detected {scanner.get_code() = }")
+                #     First = True
+                #     state = 2
             case 2:
                 if First:
                     scanner.switch_profile(giftbox_profile)
                     First = False
-                if scanner.detected_all:
-                    print(f"All {len(scanner.get_code())} codes detected {scanner.get_code() = }")
+                result = scanner.get_code()
+                if result:
+                    print(f"Code detected {result = }")
                     First = True
                     state = 3
+                # if scanner.detected_all:
+                #     print(f"All {len(scanner.get_code())} codes detected {scanner.get_code() = }")
+                #     First = True
+                #     state = 3
             case 3:
+                if First:
+                    results = []
+                    scanner.switch_profile(wallet_profile)
+                    First = False
+                if len(results) < 50:
+                    # time.sleep(1)
+                    result = scanner.get_code()
+                    # print(f"Checking... {len(results)} codes detected so far")
+                    if result:
+                        print(f"Code detected {result = }")
+                        results.append(result)
+                    else:
+                        continue
+                else:
+                    print("50 codes detected:") # {results = }")
+                    for i, code in enumerate(results):
+                        print(f"{i+1:>2}: {code}")
+                    First = True
+                    state = 4
+            case 4:
                 # scanner.exit_loop()
                 print("Done :) Exiting...")
                 break
