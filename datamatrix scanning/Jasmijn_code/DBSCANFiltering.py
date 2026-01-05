@@ -9,7 +9,7 @@ class DBSCANFiltering:
         self.eps = eps
         self.min_samples = min_samples
         
-    def get_filtered_indices(self) -> tuple[np.ndarray, np.ndarray]:
+    def get_filtered_indices(self, y_as:  bool = True) -> tuple[np.ndarray, np.ndarray]:
         """ 
             Geef indices terug van punten die NIET als ruis zijn gelabeld.
             
@@ -17,17 +17,17 @@ class DBSCANFiltering:
             niet in de geretourneerde indices zitten.
         """
         
-        labels = self.__DBSCAN_toepassen_op_y_as()
+        labels = self.__DBSCAN_toepassen_op_as(y_as=y_as)
         
         # Filter indices waar label != -1 (dus geen ruis)
         valid_indices = np.where(labels != -1)[0]
                 
         return valid_indices, labels
     
-    def get_filtered_data(self) -> np.ndarray:
+    def get_filtered_data(self, y_as: bool = True) -> np.ndarray:
         """ Geeft een nieuwe lijst terug met ALLEEN de 'goede' gefilterde data. """
         
-        labels = self.__DBSCAN_toepassen_op_y_as()
+        labels = self.__DBSCAN_toepassen_op_as(y_as=y_as)
 
         # filter alles behalve ruis
         mask = labels != -1
@@ -35,25 +35,26 @@ class DBSCANFiltering:
         
         return filtered_data
     
-    def get_filtered_data_with_indices(self) -> tuple[np.ndarray, np.ndarray]:
+    def get_filtered_data_with_indices(self, y_as: bool = True) -> tuple[np.ndarray, np.ndarray]:
         """Geef zowel gefilterde data als indices terug"""
         
-        filtered_indices, labels = self.get_filtered_indices()
-        filtered_data = self.get_filtered_data()
+        filtered_indices, labels = self.get_filtered_indices(y_as=y_as)
+        filtered_data = self.get_filtered_data(y_as=y_as)
     
         return filtered_data, filtered_indices 
            
-    def __DBSCAN_toepassen_op_y_as(self) -> np.ndarray:
-        # We pakken alleen de Y-kolom (index 1) om op te clusteren
-        # .reshape(-1, 1) is nodig omdat Scikit-learn een 2D kolom verwacht
-        Y_features = self.data[:, 1].reshape(-1, 1)
-        
+    def __DBSCAN_toepassen_op_as(self, y_as: bool = True) -> np.ndarray:
+        if y_as: # We pakken alleen de Y-kolom (index 1) om op te clusteren
+            features = self.data[:, 1].reshape(-1, 1)
+        else: # We pakken alleen de X-kolom (index 0) om op te clusteren
+            features = self.data[:, 0].reshape(-1, 1)
+                    
         # Start DBSCAN
-        db = DBSCAN(eps=self.eps, min_samples=self.min_samples).fit(Y_features)
+        db = DBSCAN(eps=self.eps, min_samples=self.min_samples).fit(features)
         
         # De labels vertellen ons bij welke groep een punt hoort.
         # Label -1 betekent: Ruis (geen groep).
-        labels = db.fit_predict(Y_features)
+        labels = db.fit_predict(features)
         
         return labels
     
@@ -62,6 +63,9 @@ class DBSCANFiltering:
         Plot DBSCAN input and results.
         If `flip_y` is True the y-axis will be inverted so the plot matches image coordinate system (origin at top-left).
         """
+        # Sluit eventuele eerdere figuren
+        plt.close('all')
+        
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
         # fig.canvas.mpl_connect('key_press_event', on_key)
          
@@ -129,12 +133,17 @@ if __name__ == "__main__":
     
     filterer = DBSCANFiltering(data=test_data, eps=50, min_samples=3)
 
-    gefilterd = filterer.get_filtered_data()
-    print("Original data points:", len(test_data))
-    print("Filtered data points:", len(gefilterd))
-    # print(gefilterd)
+    # gefilterd = filterer.get_filtered_data()
+    # print("Original data points:", len(test_data))
+    # print("Filtered data points:", len(gefilterd))
     
-    # gefilterd2 = filterer.get_filtered_indices()
-    # print("Original data points:", len(alle_data))
-    # print("Filtered data points:", len(gefilterd2))
-    # print(gefilterd2)
+    gefilterd2, labels = filterer.get_filtered_indices(y_as=False)
+    print("Original data points:", len(test_data))
+    print("Filtered data points:", len(gefilterd2))
+    
+    fig = filterer.visualize_dbscan_results(labels)   
+    while True: 
+        DBSCANFiltering.fig_to_cv2(fig)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            print("Exiting visualization...")
+            break
