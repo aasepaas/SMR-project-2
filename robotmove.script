@@ -1,9 +1,52 @@
+# Define coordinates
+Doosprepickup = p[0.53372, -0.27139, 0.32368, 0.0, 3.141, 0]
+Doospickup = p[0.53372, -0.27139, 0.22368, 0.000, 3.141, 0]
+doospickupz = 0.22368
+Doospostpickup = p[0.53372, -0.27139, 0.37368, 0.0, 3.141, 0]
+Doospostpickupz = 0.37368
+Doosmidpostpickup = p[0.53372, -0.27139, 0.33368, 0.0, 3.141, 0]
+Doosmidpostpickupz = 0.33368
 
-coords = p[0.53938, 0.01027, 0.21500, 0.084, -3.152, -0.022]
-lowerzwallet = 0.19500
-raisezwallet = 0.21500
-walletscanner_pos = p[0.53938, 0.01027, 0.30000, 0.084, -3.152, -0.022]
-boxscanner_pos = p[0.40000, -0.20000, 0.30000, 0.084, -3.152, -0.022]
+#giftbox plaatsen in mold coords
+DoosBovenMoldHoog = p[0.25603, -0.69603, 0.3592, 0.039, 2.287, 2.151]
+DoosBovenMoldMidden = p[0.25603, -0.69603, 0.09392, 0.039, 2.287, 2.151]
+DoosBovenMoldMiddenz = 0.09392
+DoosBovenMold = p[0.25603, -0.69603, 0.06292, 0.039, 2.287, 2.151]
+DoosBovenMoldz = 0.06292
+NaDoosPlaatsing = p[0.25603, -0.7495, 0.06292, 0.039, 2.287, 2.151]
+
+PreDoosPickupMold = p[0.25603, -0.7495, 0.04850, 0.039, 2.287, 2.151]
+PreDoosPickupMoldz = 0.04850
+DoosPickupMold = p[0.25103, -0.69603, 0.04850, 0.039, 2.287, 2.151]
+
+PreDoosPickupMoldNaWallet = p[0.25103, -0.7495, 0.14087, 0.039, 2.287, 2.151]
+
+
+NaDoosPlaatsingHoog = p[0.25103, -0.69603, 0.3592, 0.039, 2.287, 2.151]
+#wallet oppakken van tafel coords
+pickup = p[0.55587, 0.12303, 0.19429, 0.029, -3.141, 0]
+postpickup = p[0.55587, 0.12303, 0.39429, 0.029, -3.141, 0]
+postpickupz = 0.39429
+#scan positie van wallet datamatrix
+posscan = p[0.29504, -0.32626, 0.27504, 0.080, 3.141, 0]
+
+#wallet oppakken van tafel coords
+Walletprepickup = p[0.55587, 0.12303, 0.39429, 0.029, -3.141, 0]
+Walletpickup = p[0.55587, 0.12303, 0.19429, 0.029, -3.141, 0]
+Walletpickupz = 0.19429
+Walletpostpickup = p[0.55587, 0.12303, 0.39429, 0.029, -3.141, 0]
+Walletpostpickupz = 0.39429
+#posscanPost = p[0.29504, -0.32626, 0.47504, 0.080, 3.141, 0]
+
+#wallet plaatsen in giftbox coords
+WalletPrePlacingHigh = p[0.307, -0.69686, 0.30270, 0.170, -2.297, -2.234]
+WalletPrePlacingMedium = p[0.28297, -0.68467,0.10530, 0.916, -2.510, -2.331]
+WalletPrePlacingLow = p[0.27235, -0.68424, 0.09079, 1.029, -2.516, -2.383]
+WalletPlacing = p[0.25893, -0.68811, 0.08162, 1.013, -2.486, -2.411]
+WalletPostPlacing = p[0.27990, -0.68949, 0.08919, 1.165, -2.601, -2.417]
+WalletPostPlacingBack = p[0.25395, -0.72747, 0.09172, 0.073, -2.506, -2.081]
+WalletPushingAfterPlacing = p[0.25533, -0.68291, 0.11747, 0.011, 2.583, 1.719]
+WalletAfter = p[0.25900, -0.72501, 0.14087, 0.003, 2.641, 1.612]
 
 ip = "192.168.0.43"
 socket_name = "socket1"
@@ -12,105 +55,216 @@ socket_name = "socket1"
 
 
 
-
+# Function to apply new Z
 def set_pose_z(pose, new_z):
     return p[pose[0], pose[1], new_z, pose[3], pose[4], pose[5]]
 end
 
+# function to make coords into pose 
+def makepose(coords):
+    return p[coords[2], coords[3], coords[4], coords[5], coords[6], coords[7]]
+end
 
+def get_sigs(coords):
+    return coords[-1], coords[1]
+end
+
+
+# Function to move to target
 def moveto_target_coords(coords):
+
+    pose = makepose(coords)
+    sig, _ = get_sigs(coords)
     set_standard_analog_out(0, 0)
-    movel(coords, a=1.2, v=0.25)
-    movel(set_pose_z(coords, lowerzwallet))
-    set_standard_digital_out(0, True)
-    set_standard_analog_out(0, 0.33) 
-    movel(set_pose_z(coords, 0.26018))
-    movel(set_pose_z(coords, raisezwallet))
-    sleep(1)
-    set_standard_digital_out(0, False)
+    if sig == 1:
+      set_standard_analog_out(0, 0.282)
+    end
+
+    movej(pose, a=1.2, v=0.25)
+    if sig == 0:
+      movej(Doosprepickup, a=1.2, v=0.5)
+      sleep(0.01)
+      movel(set_pose_z(pose, doospickupz))
+
+      set_standard_digital_out(0, True)
+      set_standard_analog_out(0, 0.17)
+
+      movel(set_pose_z(pose, Doosmidpostpickupz))
+      set_standard_analog_out(0, 0.33)
+
+      sleep(0.4)
+
+      set_standard_digital_out(0, False)
+      movel(set_pose_z(pose, Doospostpickupz))
+    end
+      
+    if sig == 1:
+      movej(Walletprepickup, a=1.2, v=0.5)
+      sleep(0.01)
+      movel(set_pose_z(pose, Walletpickupz))
+
+      set_standard_analog_out(0, 0.33) 
+      set_standard_digital_out(1, True)
+      sleep(0.5)
+      set_standard_digital_out(2, True)
+      movel(set_pose_z(pose, Walletpostpickupz))
+      set_standard_analog_out(1, 0.055)
+    end
 end
 
-def moveto_scanner(msg):
-    if msg == "wallet":
-        movel(walletscanner_pos, a=1.2, v=0.25)
-    elif msg == "box":
-        movel(boxscanner_pos, a=1.2, v=0.25)
-    else:
-        popup("Error: Unknown scanner position", title="Error", error=True)
-        textmsg("error: unknown scanner position")
-        socket_send_string("error: unknown scanner position", socket_name)
-    sleep(1)
+def moveto_scanner():
+   
+        movej(posscan, a=1.2, v=0.25)
+        scan(coords)
 end
 
-def scan():
-  while True:
-    socket_send_string(socket_name, "scan")
-    correct = socket_read_string(socket_name, timeout=0)
-    if correct == "correct":
-      moveto_opener(failstate=False)
-      break
-    else if correct == "incorrect":
-      moveto_opener(failstate=True)
-      break
+def scan(coords):
+  sig, fail = get_sigs(coords)
+  if sig == 0:
+    if fail == 1:
+      moveto_opener(failstate=False, sig)
     else:
-      popup("Error: Unknown scan result", title="Error", error=True)
-      textmsg("error: unknown scan result")
-      socket_send_string("error: unknown scan result", socket_name)
-      sleep(1)
-      continue
+      moveto_opener(failstate=True, sig)
+    end
+  else:
+    socket_send_string(socket_name, "SCAN_WALLET")
+    while True:
+      correct = socket_read_string(socket_name, timeout=0)
+      if correct == "correct":
+        moveto_opener(failstate=False, sig)
+        break
+      elif correct == "incorrect":
+        moveto_opener(failstate=True, sig)
+        break
+      else:
+        popup("Error: Unknown scan result", title="Error", error=True)
+        textmsg("error: unknown scan result")
+        socket_send_string("ERROR", socket_name)
+        sleep(1)
+        continue
+     
+  
+     
+  end
+end
     
     
 
 def moveto_home():
-    home_pos = p[0.50000, 0.00000, 0.50000, 0.000, -3.1415, 0.000]
     movel(home_pos, a=1.2, v=0.25)
 end
 
-def moveto_opener(failstate=False):
+def moveto_opener(failstate=False, sig):
     # Use correct variables
-    movel(openerpos, a=1.2, v=0.5)
-    if get_standard_digital_out(2):
-        set_standard_digital_out(2, False)  # deactivate motor
-        sleep(1000)
+    set_standard_digital_out(1, True)
+    set_standard_digital_out(2, True)
+    if get_standard_analog_out(1) == 0.33:
+        set_standard_analog_out(1, 0.0)  # deactivate motor
+    end
 
-    movel(lowerzwallet, a=1.2, v=0.25)
+    
     
     if failstate:
-        set_standard_analog_out(1, 0.33)
-        sleep(1)
-        movel(raisezwallet, a=1.2, v=0.25)
-        movel(failurepos, a=1.2, v=0.5)
-        set_standard_analog_out(1, 0.0)
-        sleep(1)
+          set_standard_analog_out(0, 0.33)
+          movej(failurepos, a=1.2, v=0.5)
+          movej(set_pose_z(failurepos, lowerzwallet))
+          set_standard_analog_out(0, 0.2)
+          movej(set_pose_z(failurepos, raisezwallet))
+          movej(subboxpos1, a=1.2, v=0.5)
+          movej(set_pose_z(subboxpos1, lowerzwallet))
+          set_standard_digital_out(0, True)
+          movej(set_pose_z(subboxpos1, raisezwallet))
+          movej(failurepos, a=1.2, v=0.5)
+          movej(set_pose_z(failurepos, lowerzwallet))
+          set_standard_digital_out(0, False)
+          movej(set_pose_z(failurepos, raisezwallet))
+
     else:
-        set_standard_analog_out(1, 0.0)
-        sleep(1)
-        movel(raisezwallet, a=1.2, v=0.25)
-        set_standard_digital_out(2, True)
-        sleep(2)
+      if sig == 1:
+        movel(WalletPrePlacingHigh)
+        sleep(0.01)
+        movel(WalletPrePlacingMedium)
+        sleep(0.01)
+        movel(WalletPrePlacingLow)
+        sleep(0.01)
+        movel(WalletPlacing)
+        sleep(0.01)
+        set_standard_analog_out(0, 0.289)
+        sleep(0.5)
+        movel(WalletPostPlacing)
+        sleep(0.01)
+        movel(WalletPostPlacingBack)
+        sleep(0.01)
+        movel(WalletPushingAfterPlacing)
+        sleep(0.01)
+        movel(WalletAfter)
+
+      else:
+        
+        movej(DoosBovenMoldHoog)
+        sleep(0.01)
+        movel(set_pose_z(DoosBovenMoldHoog, DoosBovenMoldMiddenz))
+        sleep(0.01)
+        movel(set_pose_z(DoosBovenMoldMidden, DoosBovenMoldz))
+        sleep(0.02)
+        set_standard_analog_out(0, 0.27)
+        sleep(1.2)
+        movel(NaDoosPlaatsing)
+        sleep(0.1)
+        movel(NaDoosPlaatsingHoog)
+        set_standard_analog_out(1, 0.11)
+      end
+    end
+        
+end
+
+def pickupfinishedbox():
+   set_standard_analog_out(1, 0.11)
+   movel(PreDoosPickupMoldNaWallet)
+   set_standard_analog_out(0, 0.25)
+   movel(PreDoosPickupMold)
+   sleep(1)
+   set_standard_digital_out(2, False)
+   set_standard_digital_out(1, False)
+   sleep(0.5)
+   set_standard_analog_out(1, 0.055)
+   sleep(1.5)
+   movel(DoosPickupMold)
+   sleep(0.1)
+   set_standard_analog_out(0, 0.33)
+   sleep(0.5)
+   movel(DoosBovenMoldHoog)
+   sleep(0.01)
+   movel(Doospostpickup)
+   movel(Doosmidpostpickup)
+   set_standard_analog_out(0, 0.0)
 end
 
 def main():
   socket_open(socket_name, ip, 30002)
   while True:
-    if socket_read_string(socket_name, timeout=0) == "stop":
-      break
-    coords = socket_read_string(socket_name, timeout=0)
+    coords = socket_read_ascii_float(8, socket_name, timeout=0)
+    if coords[0] != 8:
+      popup("Error: Invalid coordinates received", title="Error", error=True)
+      textmsg("Error: Invalid coordinates received")
+      socket_send_string("ERROR", socket_name)
+      sleep(1)
+      continue
+    end
+    sig, _ = get_sigs(coords)
     moveto_target_coords(coords)
-    socket_send_string("picked", socket_name)
-    msg = socket_read_string(socket_name, timeout=0)
-    moveto_scanner(msg)
-    scan()
-    coordswallet = socket_read_string(socket_name, timeout=0)
-    moveto_target_coords(coordswallet)
-    socket_send_string("pickedwallet", socket_name)
-    msg = socket_read_string(socket_name, timeout=0)
-    moveto_scanner(msg)
-    scan()
+    
+    if sig == 1:
+      moveto_scanner()
+
+    else:
+      scan(coords)
+    
+    pickupfinishedbox()
   
-  moveto_home()
+  moveto_home() 
   socket_close(socket_name)
+ end
 
 
-
-moveto_target_coords(coords)
+main()
