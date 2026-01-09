@@ -28,22 +28,18 @@ def threaded_key_profile_switcher(scanner: CameraScanner):
             scanner.exit_loop()
             break
         elif keyboard.is_pressed("1"):
-            scanner.running = False
             scanner.running = True
             scanner.switch_profile(wallet_profile)
             time.sleep(0.25)  # debounce
         elif keyboard.is_pressed("2"):
-            scanner.running = False
             scanner.running = True
             scanner.switch_profile(giftbox_profile)
             time.sleep(0.25)
         elif keyboard.is_pressed("3"):
-            scanner.running = False
             scanner.running = True
             scanner.switch_profile(barcode_profile)
             time.sleep(0.25)
         elif keyboard.is_pressed("0"):
-            scanner.running = False
             scanner.running = True
             scanner.switch_profile(standard_profile)
             time.sleep(0.25)
@@ -102,7 +98,7 @@ def main():
     # Verhoogd naar 8 threads voor 50 ROI's parallelle verwerking
     matrix_decoder = DataMatrixDecoder(num_threads=8, max_queue_size=100)
     barcode_decoder = BarcodeDecoder(num_threads=8, max_queue_size=100)    
-    roi_detector = ROIAutoDetector(DEBUG=True, DEBUGPROCESS=True)
+    roi_detector = ROIAutoDetector(DEBUG=True, DEBUGPROCESS=False) # Verander DEBUGPROCESS naar True als je de process stappen wilt zien. 
 
     # Realtime = False
     # if Realtime: #-=x Use two live cameras # Original, 4K Webcam
@@ -119,10 +115,17 @@ def main():
     #     ]2
     
     feed_list = [
-            VideoFeed("Recorded Video 1 (Camera Original)", True, "Jasmijn_code/videos/record_of_wallets_Kiyo_30secV6.avi", loop=True),
-            LiveFeed("Camera 4K Webcam", False, giftbox_profile.camera_index),
-            # VideoFeed("Recorded Video 1 (Camera 4K Webcam)", False, "Jasmijn_code/videos/test_mjpg_1.avi", loop=True),
-            VideoFeed("Recorded Video 2 (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output3.avi", loop=True),
+            # scannen van 1 wallet per keer
+            VideoFeed("Recorded Video (Camera Original)", True, "Jasmijn_code/videos/record_of_wallets_Kiyo_30secV6.avi", loop=True),
+            
+            # scannen van 50 giftboxes of 1 barcode per keer
+            # LiveFeed("Camera 4K Webcam", False, giftbox_profile.camera_index),
+            # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/testrecord_4kV4.avi", loop=True),
+            VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/test_mjpg_1.avi", loop=True),
+            # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/test_raw.avi", loop=True),
+            
+            # dummy video om code te laten werken met wisselen profiel
+            VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output3.avi", loop=True),
     ]    
     scanner = CameraScanner(matrix_decoder, barcode_decoder, roi_detector, feed_list, debug = True)
     

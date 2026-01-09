@@ -199,36 +199,34 @@ class CameraScanner:
             top, bottom, left, right = self.__roi_box_size(frame.shape[0], frame.shape[1], roi)
             roi_box = frame[top:bottom, left:right]
             gray_roi = cv2.cvtColor(roi_box.astype("uint8"), cv2.COLOR_BGR2GRAY) 
-    
-            if self.profile.scan_type != giftbox_profile.scan_type:
-                # Stretch contrast: lichtste pixel -> 255, donkerste pixel -> 0
-                norm = cv2.normalize(gray_roi, gray_roi, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)  
-                if self.profile.scan_type == barcode_profile.scan_type:
-                    pass
-                    # Additional preprocessing for DataMatrix codes
-                    # norm = cv2.rotate(norm, cv2.ROTATE_90_COUNTERCLOCKWISE)
-                    # contrast verbeteren (verscherpen)
-                    # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-                    # norm  = clahe.apply(norm)
-                    tresh = cv2.threshold(norm, 128, 255, cv2.THRESH_BINARY)[1]
-                    cv2.imshow("Barcode threshold", tresh)
-                    #245/16 = 15.3
-                    # 15.3 * 7 = 107.1 108
-                    # 15.3 * 5 = 76.5 77
-                    # 15.3 * 9 = 137.7 138
-                    min_thresh_value, max_thresh_value, thresh_steps = 77, 138, 16
-                    min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps = 9, 599, 16
-                    thresh_values = (min_thresh_value, max_thresh_value, thresh_steps)
-                    adap_thresh_values = (min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps)
+            # Stretch contrast: lichtste pixel -> 255, donkerste pixel -> 0
+            norm = cv2.normalize(gray_roi, gray_roi, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)  
 
-                    test = self.test_low_contrast_wallet(norm, thresh_values, adap_thresh_values, max_per_row=6)
-                    cv2.imshow("Selected low-contrast threshold", test)
-                    # norm  = test3
-                    # width, height = norm.shape[1], norm.shape[0]
-                    # norm = norm[height//2+(height//10):height, 0:width]
-                    # norm = cv2.normalize(norm, norm, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U) 
-                # Testing low-contrast wallet profile
-                elif self.profile.name == wallet_profile.name:
+            if self.profile.name == giftbox_profile.name:
+                pass
+            
+            elif self.profile.name == barcode_profile.name:
+                # Additional preprocessing for DataMatrix codes
+                # norm = cv2.rotate(norm, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                # contrast verbeteren (verscherpen)
+                # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                # norm  = clahe.apply(norm)
+                tresh = cv2.threshold(norm, 128, 255, cv2.THRESH_BINARY)[1]
+                cv2.imshow("Barcode threshold", tresh)
+                # test of tresholding beter werkt voor barcodes?
+                min_thresh_value, max_thresh_value, thresh_steps = 77, 138, 16
+                min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps = 9, 599, 16
+                thresh_values = (min_thresh_value, max_thresh_value, thresh_steps)
+                adap_thresh_values = (min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps)
+
+                test = self.test_low_contrast_wallet(norm, thresh_values, adap_thresh_values, max_per_row=6)
+                cv2.imshow("Selected low-contrast threshold", test)
+                # norm  = test3
+                # width, height = norm.shape[1], norm.shape[0]
+                # norm = norm[height//2+(height//10):height, 0:width]
+                # norm = cv2.normalize(norm, norm, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U) 
+                
+            elif self.profile.scan_type == wallet_profile.scan_type:
                     min_thresh_value, max_thresh_value, thresh_steps = 5, 250, 16
                     min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps = 9, 599, 16
                     thresh_values = (min_thresh_value, max_thresh_value, thresh_steps)
@@ -236,9 +234,6 @@ class CameraScanner:
 
                     test = self.test_low_contrast_wallet(norm, thresh_values, adap_thresh_values, max_per_row=6)
                     cv2.imshow("Selected low-contrast threshold", test)
-            else:
-                # Stretch contrast: lichtste pixel -> 255, donkerste pixel -> 0
-                norm = cv2.normalize(gray_roi, gray_roi, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)       
 
             cv2.imshow("Giftbox ROI", norm)
             cv2.waitKey(1)

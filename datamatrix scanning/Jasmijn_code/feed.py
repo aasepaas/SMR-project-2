@@ -189,9 +189,9 @@ class LiveFeed(Feed):
         logger.info(f"Set camera {self.camera_index} ({self.name}) resolution to: {width} x {height}")
         
 # Import functions    
-def resize_frame(frame, scale_percent: float = 5): # was 1.2 # ratio 640 / 360 = 16:9
-    width = int(640 * scale_percent) 
-    height = int(360 * scale_percent)       
+def resize_frame(frame, scale: float = 2): # was 1.2 # ratio 640 / 360 = 16:9
+    width = int(640 * scale) 
+    height = int(360 * scale)       
     resized = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
     return resized
 
