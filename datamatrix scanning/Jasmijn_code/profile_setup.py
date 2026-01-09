@@ -18,8 +18,8 @@ class ScanProfile:
 
 
 
-webcam = 1
-webcam_4k = 2
+webcam = 0
+webcam_4k = 1
 webcam_kiyo1 = 0
 
 carton_box_focus = 80
@@ -27,26 +27,33 @@ carton_box_focus = 80
 # Standard profile
 standard_profile = ScanProfile(
     name="Standard",
-    rois=[(100, 400, 100, 400)],
+    rois=[],
     camera_index = webcam_kiyo1,
     data_timeout=0.5,
-    total_timeout=10.0,
+    total_timeout=0.5,
     scan_type="datamatrix",
 )
 
 # Wallet profile
+width = 55 
+height = 45
+middentp, middenlr = 685, 950
+top, left = middentp-height, middenlr-width
+bottom, right = middentp+height, middenlr+width
 # top, left = 340, 570
-# bottom, right = top+120, left+120
-top, left = 340, 570
-bottom, right = top+60, left+60
+# bottom, right = top+60, left+60
+roi_list = []
+for i in range(50):
+    roi_list.append((top, bottom, left, right))
+    
 wallet_profile = ScanProfile(
     name="Wallet",
     camera_index = webcam_kiyo1,
-    focus=140,
+    focus=210,
     # exposure=-5,
     # brightness=100,
     data_timeout=0.5,
-    total_timeout=10.0,
+    total_timeout=5,
     scan_type="datamatrix",
     rois=[(top, bottom, left, right)], # top, bottom, left, right
     # rois=[(380, 380+110, 660, 660+110)], # top, bottom, left, right
@@ -64,20 +71,29 @@ giftbox_profile = ScanProfile(
     # exposure=-6, # 0 of -6!
     # brightness=195, # 200 of 195!
     data_timeout=0.5,
-    total_timeout = 50.0, # 1 seconden per code bij 50 codes
+    total_timeout = 15.0, 
     scan_type="datamatrix",
     validate_n_times=3,
 )
 
 # Barcode profile
+# top, left = 3ht = top+150, left+200 # = 800, 1100
+
+
+width = 110
+height = 60
+middenlr, middentp = 2145-20, 1130+30
+top, left = middentp-height, middenlr-width
+bottom, right = middentp+height, middenlr+width
+
 barcode_profile = ScanProfile(
     name="Barcode",
     camera_index = webcam_4k,
-    focus=carton_box_focus,
-    exposure=0,
-    brightness=200,
+    # focus=carton_box_focus,
+    # exposure=0,
+    # brightness=200,
     data_timeout=1.0,
-    total_timeout=10.0,
+    total_timeout=5.0,
     scan_type="barcode",
-    rois=[(150, 300, 100, 400)], # top, bottom, left, right
+    rois=[(top, bottom, left, right)], 
 )

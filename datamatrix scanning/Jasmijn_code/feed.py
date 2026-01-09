@@ -67,16 +67,17 @@ class VideoFeed(Feed):
         self.cap = cv2.VideoCapture(self.file_name)
         # fps = self.cap.get(cv2.CAP_PROP_FPS) * self.acceleration
         # wait_time = int(1000 / fps) if fps > 0 else 30
-    
+        print(f"Opened video file '{self.file_name}'")
+        
     def __del__(self):
-        """ Safely release camera. """
-        print("Releasing camera...")
+        """ Safely release capture. """
+        print(f"Stopping video {self.file_name}...")
         self.cap.release()
         
     def openFeed(self):
         while True:
             ret, frame = self.cap.read()
-
+        
             if ret:
                 yield frame
                 
@@ -112,15 +113,18 @@ class LiveFeed(Feed):
         # if not retrieved:
         #     print("\nFailed to retrieve frame...\n")
         #     break
-        
-        while True: #self.isactive:             
-            ret, frame = self.cap.read()
-            if not ret:
-                print("\nNo longer connected to camera...\n")
-                break
-
-            yield frame
-
+        try: 
+            while True: #self.isactive:             
+                ret, frame = self.cap.read()
+                if not ret:
+                    print("\nNo longer connected to camera...\n")
+                    break
+                # if self.camera_index == 0: 
+                #     frame = cv2.rotate(frame, cv2.ROTATE_180)  # Mirror for internal camera
+                yield frame
+        finally:
+            self.__del__
+            
     def configure_camera(self, profile: ScanProfile, set_resolution: bool = False) -> None: 
         """ Apply all camera settings from the profile (single source of truth."""
         
@@ -185,7 +189,7 @@ class LiveFeed(Feed):
         logger.info(f"Set camera {self.camera_index} ({self.name}) resolution to: {width} x {height}")
         
 # Import functions    
-def resize_frame(frame, scale_percent: float = 2): # was 1.2 # ratio 640 / 360 = 16:9
+def resize_frame(frame, scale_percent: float = 5): # was 1.2 # ratio 640 / 360 = 16:9
     width = int(640 * scale_percent) 
     height = int(360 * scale_percent)       
     resized = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)

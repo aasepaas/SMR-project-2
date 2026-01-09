@@ -17,7 +17,7 @@ class ROIAutoDetector:
     - Press 'q' to quit and accept detected ROIs
     """
     
-    def __init__(self, expected_n_rois = 51, DEBUG: bool = False, DEBUGPROCESS: bool = False):
+    def __init__(self, expected_n_rois = 100, DEBUG: bool = False, DEBUGPROCESS: bool = False):
         self.debug = DEBUG
         self.debug_process = DEBUGPROCESS
         self.frame_scale = 2       
@@ -83,21 +83,21 @@ class ROIAutoDetector:
         #     cv2.imshow("Threshold blur 220", resize_frame(th5))
 
         # Groffe filtering met connected components
-        Groffe_filter, _ = self.__connected_components_filtering(th2, Min_area=100, Max_area=40_000, squareness=15, connect=4)                    
+        Grove_filter, _ = self.__connected_components_filtering(th2, Min_area=100, Max_area=40_000, squareness=15, connect=4)                    
         if self.debug_process: 
-            cv2.imshow("Groffe_filter", resize_frame(Groffe_filter))
+            cv2.imshow("Groffe_filter", resize_frame(Grove_filter))
 
         # Make bounding rectangles around detected components
-        contours, _ = cv2.findContours(Groffe_filter, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(Grove_filter, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
             x, y, cw, ch = cv2.boundingRect(cnt)   
             side = ch if cw - ch < 0 else cw
-            cv2.rectangle(Groffe_filter, (x, y), (x + side, y + side), (255), -1)     
+            cv2.rectangle(Grove_filter, (x, y), (x + side, y + side), (255), -1)     
         if self.debug_process: 
-            cv2.imshow("Bounding Rectangles", resize_frame(Groffe_filter)) 
+            cv2.imshow("Bounding Rectangles", resize_frame(Grove_filter)) 
         
         # Fijne filtering met connected components
-        Fijne_filter, boxes = self.__connected_components_filtering(Groffe_filter, Min_area=1000*self.frame_scale, Max_area=100_000, squareness=1, connect=8) # Used to be 1000 with 1280x720, with 4K now 4000                    
+        Fijne_filter, boxes = self.__connected_components_filtering(Grove_filter, Min_area=1000*self.frame_scale, Max_area=100_000, squareness=1, connect=8) # Used to be 1000 with 1280x720, with 4K now 4000                    
         if self.debug_process: 
             cv2.imshow("Fijne_filter", resize_frame(Fijne_filter))
 

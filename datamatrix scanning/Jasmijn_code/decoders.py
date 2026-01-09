@@ -73,8 +73,10 @@ class DecoderBase(ABC):
                         self.results[index] = decoded[0] if decoded else ""
                         # Only log successful decodes
                         if decoded:
-                            logger.approved(f"{self.name} - ✓ ROI {index}: '{self.results[index]}'") # type: ignore
-                    continue
+                            logger.approved(f"{self.name} - ✓ ROI {index+1:>2}: '{self.results[index]}'") # type: ignore
+                        else: 
+                            logger.denied(f"{self.name} - ✗ ROI {index+1}: Failed") # type: ignore
+                        continue
                 
                 #-=x Enhanced decode with retries until timeout
                 # print("Trying multiple decode attempt")
@@ -93,15 +95,19 @@ class DecoderBase(ABC):
                     if decoded and decoded[0]:
                         decoded_value = decoded[0]
                         if any(c in decoded_value for c in ['<', '>', '{', '}', '|', '\\', '\',' '^', '`', ';', "'", '*', '!', '@', '#', '$', '%', '&']):
-                            logger.critical(f"{self.name} - ROI {index}: Suspicious characters in decoded value '{decoded_value}'")
+                            logger.critical(f"{self.name} - ROI {index+1:>2}: Suspicious characters in decoded value '{decoded_value}'")
                             continue
                         
+                        if len(decoded_value) < 12:
+                            logger.critical(f"{self.name} - ROI {index+1:>2}: Decoded value '{decoded_value}' is too short")
+                            continue
+
                         with self.lock:
                             # Only update if not already set or was empty
                             if index not in self.results or not self.results[index]:
                                 self.results[index] = decoded_value
                                 elapsed = time.time() - start_time
-                                logger.approved(f"{self.name} - ✓ ROI {index}: '{decoded_value}' (attempt {attempts}, {elapsed:.2f}s)") # type: ignore
+                                logger.approved(f"{self.name} - ✓ ROI {index+1:>2}: '{decoded_value}' (attempt {attempts}, {elapsed*1000:.4f}ms)") # type: ignore
                         break
                     
                     # Small delay before retry to avoid hammering
@@ -110,13 +116,13 @@ class DecoderBase(ABC):
                 # If still no result after timeout, store empty string
                 if not decoded_value:
                     with self.lock:
-                        if index not in self.results:
+                        if index not in self.results or not self.results[index]:
                             self.results[index] = ""
                             elapsed = time.time() - start_time
-                            logger.denied(f"{self.name} - ✗ ROI {index}: Failed after {attempts} attempts ({elapsed:.2f}s)") # type: ignore
+                            logger.denied(f"{self.name} - ✗ ROI {index+1:>2}: Failed after {attempts} attempts ({elapsed*1000:.4f}ms)") # type: ignore
                             
             except Exception as e:
-                logger.error(f"{self.name} decode error for ROI {index}: {e}", exc_info=True)
+                logger.error(f"{self.name} decode error for ROI {index+1:>2}: {e}", exc_info=True)
                 with self.lock:
                     if index not in self.results or not self.results[index]:
                         self.results[index] = ""
@@ -131,7 +137,6 @@ class DecoderBase(ABC):
         
         Uses queue.join() with proper timeout handling.
         """
-        queue_size = self.input_queue.qsize()
         self.input_queue.join()
 
         with self.lock:
@@ -139,7 +144,7 @@ class DecoderBase(ABC):
         
         # Only log summary
         successful = sum(1 for v in results.values() if v)
-        logger.debug(f"{self.name} - Processed {queue_size} items -> {successful}/{len(results)} decoded")
+        logger.debug(f"{self.name} - Successfully decoded {successful}/{len(results)} ROIs")
         return results
             
     def flush(self) -> None:

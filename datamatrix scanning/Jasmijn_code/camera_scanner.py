@@ -138,12 +138,12 @@ class CameraScanner:
         total = len(self.rois)
         cols = max(total//10, 1)
         rows = max(total//5, 1)
-        print(f"{total} ROIs to display in grid of {cols} cols and {rows} rows")
+        # print(f"{total} ROIs to display in grid of {cols} cols and {rows} rows")
         
         # print(f"width = {frame.shape[1]}, height = {frame.shape[0]}")
         top, bottom, left, right = self.__roi_box_size(frame.shape[0], frame.shape[1], self.rois[0])
         roi_width, roi_height = right - left, bottom - top
-        print(f"Each ROI box size: {roi_width}x{roi_height}")
+        # print(f"Each ROI box size: {roi_width}x{roi_height}")
         
         # Create canvas (convert to BGR for colored borders)
         canvas = np.zeros((rows * roi_height, cols * roi_width, 3), dtype=np.uint8)
@@ -204,12 +204,29 @@ class CameraScanner:
                 # Stretch contrast: lichtste pixel -> 255, donkerste pixel -> 0
                 norm = cv2.normalize(gray_roi, gray_roi, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)  
                 if self.profile.scan_type == barcode_profile.scan_type:
+                    pass
                     # Additional preprocessing for DataMatrix codes
-                    norm = cv2.rotate(norm, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                    # norm = cv2.rotate(norm, cv2.ROTATE_90_COUNTERCLOCKWISE)
                     # contrast verbeteren (verscherpen)
-                    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-                    norm  = clahe.apply(norm)
-                    
+                    # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                    # norm  = clahe.apply(norm)
+                    tresh = cv2.threshold(norm, 128, 255, cv2.THRESH_BINARY)[1]
+                    cv2.imshow("Barcode threshold", tresh)
+                    #245/16 = 15.3
+                    # 15.3 * 7 = 107.1 108
+                    # 15.3 * 5 = 76.5 77
+                    # 15.3 * 9 = 137.7 138
+                    min_thresh_value, max_thresh_value, thresh_steps = 77, 138, 16
+                    min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps = 9, 599, 16
+                    thresh_values = (min_thresh_value, max_thresh_value, thresh_steps)
+                    adap_thresh_values = (min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps)
+
+                    test = self.test_low_contrast_wallet(norm, thresh_values, adap_thresh_values, max_per_row=6)
+                    cv2.imshow("Selected low-contrast threshold", test)
+                    # norm  = test3
+                    # width, height = norm.shape[1], norm.shape[0]
+                    # norm = norm[height//2+(height//10):height, 0:width]
+                    # norm = cv2.normalize(norm, norm, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U) 
                 # Testing low-contrast wallet profile
                 elif self.profile.name == wallet_profile.name:
                     min_thresh_value, max_thresh_value, thresh_steps = 5, 250, 16
@@ -220,10 +237,12 @@ class CameraScanner:
                     test = self.test_low_contrast_wallet(norm, thresh_values, adap_thresh_values, max_per_row=6)
                     cv2.imshow("Selected low-contrast threshold", test)
             else:
-                resized = cv2.resize(gray_roi, (0,0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
                 # Stretch contrast: lichtste pixel -> 255, donkerste pixel -> 0
-                norm = cv2.normalize(resized, resized, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)       
-            
+                norm = cv2.normalize(gray_roi, gray_roi, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)       
+
+            cv2.imshow("Giftbox ROI", norm)
+            cv2.waitKey(1)
+                
             while True:
                 if self.profile.scan_type == barcode_profile.scan_type:
                     if self.barcode_decoder.input_queue.full():
@@ -236,7 +255,20 @@ class CameraScanner:
                     else:
                         self.dm_decoder.input_queue.put({"index": index, "frame": norm})
                 break
-        
+    
+    @staticmethod        
+    def normalize_image(img):
+        # Normalize using numpy to avoid OpenCV binding/type-check overload issues
+        up = img.astype(np.float32)
+        minv = float(np.min(up))
+        maxv = float(np.max(up))
+        span = maxv - minv
+        if span <= 0:
+            norm = np.clip(up, 0, 255)
+        else:
+            norm = (up - minv) * (255.0 / span)
+        return np.round(norm).astype(np.uint8)
+    
     #! Multiple batches
     def _preprocess_roi(self, roi_img, variant=0):
         # Convert to grayscale and upscale
@@ -244,8 +276,7 @@ class CameraScanner:
         upscaled = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
         
         if variant == 0:
-            # Normalize
-            return cv2.normalize(upscaled, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+            return self.normalize_image(upscaled)
         elif variant == 1:
             # CLAHE
             clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
@@ -259,8 +290,8 @@ class CameraScanner:
             blurred = cv2.GaussianBlur(upscaled, (3, 3), 0)
             kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
             sharpened = cv2.filter2D(blurred, -1, kernel)
-            return cv2.normalize(sharpened, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-
+            return self.normalize_image(sharpened)
+        
     #! Multiple batches    
     def _extract_roi_image(self, frame, roi_idx):
         if roi_idx >= len(self.rois):
@@ -287,7 +318,7 @@ class CameraScanner:
                 processed = self._preprocess_roi(roi_img, variant)
                 self.dm_decoder.input_queue.put({"index": idx, "frame": processed})
         
-        decoded = self.__decode_roi(timeout=timeout)
+        decoded = self.__decode_roi()
         for roi_idx, value in decoded.items():
             if value:
                 self.batch_results[roi_idx] = value
@@ -384,7 +415,6 @@ class CameraScanner:
         current_camera_index = self.profile.camera_index
         self.switch_time = time.time()
         self.timeout_reached = False
-        final_results = None
         
         while self.running:
             # =============================================================
@@ -409,10 +439,14 @@ class CameraScanner:
                 break
                 continue
             
+            if self.profile == standard_profile:
+                # print("Standard profile selected, skipping scanning.")
+                continue
+            
             # =============================================================
             # If no ROIs assigned yet, try to retrieve them
             # =============================================================
-            if not self.rois:
+            if not self.rois and self.profile == giftbox_profile:
                 rois = self.__retrieve_rois(frame)
                 if rois:
                     self.rois = rois
@@ -427,26 +461,30 @@ class CameraScanner:
                 continue
             
             # print(f"{len(self.rois) = } en {len(self.persistent_results) = }, result = {len(self.rois)} >= {(len(self.persistent_results) - 1)}")
-            if len(self.rois) <= 1:
-                pass
-            else: 
-                if len(self.persistent_results) >= len(self.rois):
-                    self.detected_all = True
-                    self.codes_retrieved = False
-                    logger.debug("All ROIs have been successfully decoded.")
-                    logger.debug(f"Completed in {time.time() - self.switch_time:.4f} seconds.")
-                    continue
-                
+            # if len(self.rois) <= 1:
+            #     pass
+            # else: 
+            if len(self.persistent_results) >= len(self.rois):
+                self.detected_all = True
+                self.codes_retrieved = False
+                logger.debug("All ROIs have been successfully decoded.")
+                logger.debug(f"Completed in {time.time() - self.switch_time:.4f} seconds.")
+                continue
+            
             if time.time() - self.switch_time > self.profile.total_timeout:    
-                logger.critical("Total scan timeout reached.")
+                logger.critical(f"Total scan timeout of {self.profile.total_timeout} seconds reached.")
                 logger.debug("Please retreive codes or switch profile.")
                 self.timeout_reached = True
                 self.detected_all = True
                 self.codes_retrieved = False
             else:
                 self.timeout_reached = False
+
+
+            total_rois = len(self.rois)
+            processing_rois = total_rois - len(self.persistent_results)
                 
-                     
+            self.show_frame(frame, total_rois)         
             # Wrap the processing in a broad exception catcher so unexpected errors get logged instead of silently terminating the thread.
             try:
                 # Start decoders
@@ -459,18 +497,17 @@ class CameraScanner:
                 self.batch_results = self.persistent_results.copy()
                 
 
-                total_rois = len(self.rois)
-                processing_rois = total_rois - len(self.persistent_results)
                 
                 if single_batch: #! Single batch
                     # logger.debug(f"Single batch processing of {processing_rois} ROIs")
                     
                     t2 = time.perf_counter()
                     self.__process_frame(frame) 
-                    # Show all ROIs in 5x10 grid
+                    # Show all ROIs in grid
                     roi_grid = self.__create_roi_grid(frame)
-                    cv2.imshow("ROI Grid (5x10)", roi_grid)
+                    cv2.imshow("ROI Grid", roi_grid)
                     cv2.waitKey(1) # in milliseconds
+                    
                     # Expire stored code
                     self.__expire_code_if_needed()
 
@@ -478,23 +515,20 @@ class CameraScanner:
                     decoded = self.__decode_roi()
                     # If decoder returned no results or only empty strings (e.g. {0: ''}), treat as no decode and continue to next frame.
                     if (not decoded) or (isinstance(decoded, dict) and all(not v for v in decoded.values())):
-                        continue
-                    
-                    t3 = time.perf_counter()
-                    logger.warning(f"Frame decode time: {(t3 - t2):.4f} s")         
-                    self.flush_decoder_queues()
-                    
-                    # Keep decoded as a dict ordered by ROI index (ascending)
-                    decoded = dict(sorted(decoded.items()))  # dict(int: str)
-                    print(f"Decoded: {decoded}")
-                    
-                    for roi_idx, value in decoded.items():
-                        if value:
-                            self.persistent_results[roi_idx] = value
-                            
-                    final_results = {i: self.persistent_results.get(i, "") for i in range(total_rois)}
-                    # print(f"Decoded final_results: {final_results}")
-                            
+                        pass
+                    else:
+                        t3 = time.perf_counter()
+                        logger.warning(f"Frame decode time: {(t3 - t2):.4f} s")         
+                        self.flush_decoder_queues()
+                        
+                        # Keep decoded as a dict ordered by ROI index (ascending)
+                        decoded = dict(sorted(decoded.items()))  # dict(int: str)
+                        # print(f"Decoded: {decoded}")
+                        
+                        for roi_idx, value in decoded.items():
+                            if value:
+                                self.persistent_results[roi_idx] = value
+                                                            
                 else: #! Multiple batches
                     # logger.debug(f"Multiple batch processing of {total_rois} ROIs")
                     
@@ -533,11 +567,7 @@ class CameraScanner:
                     total_rois = len(self.rois)
                     success_rate = (num_decoded / total_rois * 100) if total_rois > 0 else 0
                     elapsed = time.time() - start_time
-                    
-                    final_results = {i: self.persistent_results.get(i, "") for i in range(total_rois)}
-                    final_results = dict(sorted(final_results.items()))
-                    print(f"Decoded: {final_results}")
-                    
+                                        
                     logger.warning(f"Scan complete: {num_decoded}/{total_rois} ({success_rate:.1f}%) in {elapsed:.1f}s")
                     
                     # DO NOT reset persistent_results - they persist across scanning rounds! Only reset batch_results for next round
@@ -552,34 +582,45 @@ class CameraScanner:
                 break
                                       
             # Display frames - only when we have final results
-            if self.DEBUG:
-                if frame is not None:
-                    h, w = frame.shape[:2] 
-                    
-                    for i, roi_box in enumerate(self.rois):
-                        decoded_str = None
-                        
-                        # Draw all ROIs in red, decoded ones in green
-                        top, bottom, left, right = self.__roi_box_size(h, w, roi_box)
-                        if final_results:    
-                            decoded_str = final_results.get(i, "")
-                            # print(f"ROI {i+1} decoded string: {decoded_str}")
-                        color = (0, 255, 0) if decoded_str else (0, 0, 255) 
-                        cv2.rectangle(frame, (left, top), (right, bottom), color, thickness=3)
-                        if decoded_str:
-                            cv2.putText(frame, decoded_str, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8*self.frame_scale, color, int(2*self.frame_scale))
-                    
-                    # Show image
-                    cv2.imshow("Camera", resize_frame(frame))
-                    cv2.waitKey(1)  # in milliseconds
-                        
+            self.show_frame(frame, total_rois)
+            # if self.persistent_results:
+            print(f"Decoded: {self.persistent_results}")  
+                      
         # No longer running                
         logger.info("CameraScanner.run exiting")
         print(f"Number of detected codes: {len(self.persistent_results)} / {len(self.rois)}")
         self.persistent_results = dict(sorted(self.persistent_results.items()))
         for i in range(len(self.rois)):
-            print(f"ROI {i+1}: {self.persistent_results.get(i, '<no code>')}")
+            print(f"ROI {i+1:>2}: {self.persistent_results.get(i, '<no code>')}")
 
+    def show_frame(self, frame, total_rois) -> None:
+        """Display the current frame with scaling."""
+        final_results = {i: self.persistent_results.get(i, "") for i in range(total_rois)}
+        final_results = dict(sorted(final_results.items()))
+        # print(f"Decoded: {final_results}")
+
+        if self.DEBUG:
+            if frame is not None:
+                h, w = frame.shape[:2] 
+                
+                for i, roi_box in enumerate(self.rois):
+                    decoded_str = None
+                    
+                    # Draw all ROIs in red, decoded ones in green
+                    top, bottom, left, right = self.__roi_box_size(h, w, roi_box)
+                    if final_results:    
+                        decoded_str = final_results.get(i, "")
+                        # print(f"ROI {i+1} decoded string: {decoded_str}")
+                    color = (0, 255, 0) if decoded_str else (0, 0, 255) 
+                    cv2.rectangle(frame, (left, top), (right, bottom), color, thickness=3)
+                    if decoded_str:
+                        cv2.putText(frame, decoded_str, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8*self.frame_scale, color, int(2*self.frame_scale))
+                
+                # Show image
+                cv2.imshow("Camera", resize_frame(frame))
+                cv2.waitKey(1)  # in milliseconds
+
+            
     def __handle_key(self) -> None:
         """Process keyboard input from the capture loop."""          
         key = cv2.waitKey(1) & 0xFF
@@ -689,13 +730,13 @@ class CameraScanner:
             cv2.imshow("All normal Thresholds", im_h1)
         
         # Generate a series of adaptive thresholds between two odd block sizes
-        adaptive_results = self._threshold_series(frame, mode='adaptive', min_block=min_adap_thresh_value, max_block=max_adap_thresh_value, steps=adap_thresh_steps, c=5)
+        adaptive_results = self._threshold_series(frame, mode='adaptive', min_block=min_adap_thresh_value, max_block=max_adap_thresh_value, steps=adap_thresh_steps, c=3)
         # Show concatenated result and return the finest (smallest blockSize) image
         # adaptive_results is produced in descending block-size order (max -> min)
         im_h2 = self._tile_images(adaptive_results, max_per_row=max_per_row, thumb_h=thumb_h)
         if im_h2 is not None and getattr(im_h2, 'size', 0) > 0:
             cv2.imshow("All adaptive Thresholds", im_h2)
-        return adaptive_results[-2]
+        return normal_results[0]
 
     def _threshold_series(self, frame: MatLike, mode: str = 'adaptive', *,
                           # adaptive params

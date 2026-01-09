@@ -8,7 +8,7 @@ from feed import LiveFeed, VideoFeed
 from camera_scanner import CameraScanner
 from decoders import DataMatrixDecoder, BarcodeDecoder
 from roi_auto_detector import ROIAutoDetector
-from profile_setup import wallet_profile, giftbox_profile, barcode_profile
+from profile_setup import standard_profile, wallet_profile, giftbox_profile, barcode_profile
 
 # Initialize environment and logging before importing modules that use cv2/matplotlib
 from logging_config import init_environment, set_up_loger
@@ -28,16 +28,24 @@ def threaded_key_profile_switcher(scanner: CameraScanner):
             scanner.exit_loop()
             break
         elif keyboard.is_pressed("1"):
+            scanner.running = False
             scanner.running = True
             scanner.switch_profile(wallet_profile)
             time.sleep(0.25)  # debounce
         elif keyboard.is_pressed("2"):
+            scanner.running = False
             scanner.running = True
             scanner.switch_profile(giftbox_profile)
             time.sleep(0.25)
         elif keyboard.is_pressed("3"):
+            scanner.running = False
             scanner.running = True
             scanner.switch_profile(barcode_profile)
+            time.sleep(0.25)
+        elif keyboard.is_pressed("0"):
+            scanner.running = False
+            scanner.running = True
+            scanner.switch_profile(standard_profile)
             time.sleep(0.25)
 
 
@@ -53,7 +61,7 @@ def threaded_match_case_profile_switcher(scanner, state=0):
         match state:
             case 0:
                 time.sleep(2) 
-                state = 1
+                state = 3
             case 1:
                 if scanner.profile.name != giftbox_profile.name:
                     scanner.switch_profile(giftbox_profile)
@@ -80,7 +88,7 @@ def threaded_match_case_profile_switcher(scanner, state=0):
                     print("50 codes detected:") # {results = }")
                     for i, code in enumerate(code_collection):
                         print(f"{i+1:>02}: {code}")
-                    state = 4
+                    state = 1
             case 4:
                 scanner.exit_loop()
                 print("Done :) Exiting...")
@@ -96,20 +104,26 @@ def main():
     barcode_decoder = BarcodeDecoder(num_threads=8, max_queue_size=100)    
     roi_detector = ROIAutoDetector(DEBUG=True, DEBUGPROCESS=True)
 
-    Realtime = True
-    if Realtime: #-=x Use two live cameras # Original, 4K Webcam
-        feed_list = [
-            LiveFeed("Camera Kiyo", True, 0), 
-            LiveFeed("Camera laptop", False, 1),
-            LiveFeed("Camera 4K Webcam", False, 2)
-        ] 
-    else:#-=x Use two recorded video files instead of live cameras.
-        feed_list = [
-            VideoFeed("Recorded Video 1 (Camera Original)", True, "Jasmijn/videos/recorded_output2.avi", loop=True),
-            VideoFeed("Recorded Video 2 (Camera 4K Webcam)", False, "Jasmijn/videos/recorded_output3.avi", loop=True),
-            VideoFeed("Recorded Video 2 (Camera 4K Webcam)", False, "Jasmijn/videos/recorded_output4.avi", loop=True),
-        ]
-        
+    # Realtime = False
+    # if Realtime: #-=x Use two live cameras # Original, 4K Webcam
+    #     feed_list = [
+    #         LiveFeed("Camera Kiyo", True, 0), 
+    #         LiveFeed("Camera laptop", False, 1),
+    #         LiveFeed("Camera 4K Webcam", False, 2)
+    #     ] 
+    # else:#-=x Use two recorded video files instead of live cameras.
+    #     feed_list = [
+    #         VideoFeed("Recorded Video 1 (Camera Original)", True, "Jasmijn_code/videos/record_of_wallets_Kiyo_30secV6.avi", loop=True),
+    #         VideoFeed("Recorded Video 2 (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output3.avi", loop=True),
+    #         VideoFeed("Recorded Video 3 (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output4.avi", loop=True),
+    #     ]2
+    
+    feed_list = [
+            VideoFeed("Recorded Video 1 (Camera Original)", True, "Jasmijn_code/videos/record_of_wallets_Kiyo_30secV6.avi", loop=True),
+            LiveFeed("Camera 4K Webcam", False, giftbox_profile.camera_index),
+            # VideoFeed("Recorded Video 1 (Camera 4K Webcam)", False, "Jasmijn_code/videos/test_mjpg_1.avi", loop=True),
+            VideoFeed("Recorded Video 2 (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output3.avi", loop=True),
+    ]    
     scanner = CameraScanner(matrix_decoder, barcode_decoder, roi_detector, feed_list, debug = True)
     
     print("="*50)
