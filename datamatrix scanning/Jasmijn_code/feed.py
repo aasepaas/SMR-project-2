@@ -67,7 +67,8 @@ class VideoFeed(Feed):
         self.cap = cv2.VideoCapture(self.file_name)
         # fps = self.cap.get(cv2.CAP_PROP_FPS) * self.acceleration
         # wait_time = int(1000 / fps) if fps > 0 else 30
-        print(f"Opened video file '{self.file_name}'")
+        if self.cap.isOpened():
+            logger.info(f"Opened video file '{self.file_name}'")
         
     def __del__(self):
         """ Safely release capture. """
@@ -189,7 +190,7 @@ class LiveFeed(Feed):
         logger.info(f"Set camera {self.camera_index} ({self.name}) resolution to: {width} x {height}")
         
 # Import functions    
-def resize_frame(frame, scale: float = 2): # was 1.2 # ratio 640 / 360 = 16:9
+def resize_frame(frame, scale: float = 1.5): # was 1.2 # ratio 640 / 360 = 16:9
     width = int(640 * scale) 
     height = int(360 * scale)       
     resized = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)

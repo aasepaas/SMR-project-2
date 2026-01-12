@@ -11,16 +11,15 @@ from roi_auto_detector import ROIAutoDetector
 from profile_setup import standard_profile, wallet_profile, giftbox_profile, barcode_profile
 
 # Initialize environment and logging before importing modules that use cv2/matplotlib
-from logging_config import init_environment, set_up_loger
-init_environment()
+from logging_config import set_up_loger
 set_up_loger()
 
 def threaded_key_profile_switcher(scanner: CameraScanner):
     while True:
-        result = scanner.get_code()
-        if result:
-            result = dict(sorted(result.items()))
-            print(f"Detected codes {result = }")
+        # result = scanner.get_code()
+        # if result:
+        #     result = dict(sorted(result.items(2)))
+        #     print(f"Detected codes {result = }")
             
         if keyboard.is_pressed("esc"):
             print("ESC has been pressed... Stopping...")
@@ -96,9 +95,9 @@ def main():
     # Start scanner
     # ---------------------------
     # Verhoogd naar 8 threads voor 50 ROI's parallelle verwerking
-    matrix_decoder = DataMatrixDecoder(num_threads=8, max_queue_size=100)
+    matrix_decoder = DataMatrixDecoder(num_threads=16, max_queue_size=100)
     barcode_decoder = BarcodeDecoder(num_threads=8, max_queue_size=100)    
-    roi_detector = ROIAutoDetector(DEBUG=True, DEBUGPROCESS=False) # Verander DEBUGPROCESS naar True als je de process stappen wilt zien. 
+    roi_detector = ROIAutoDetector(expected_n_rois=50, DEBUG=True, DEBUGPROCESS=False) # Verander DEBUGPROCESS naar True als je de process stappen wilt zien. 
 
     # Realtime = False
     # if Realtime: #-=x Use two live cameras # Original, 4K Webcam

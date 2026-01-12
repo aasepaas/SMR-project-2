@@ -1,28 +1,37 @@
 import cv2
 import numpy as np
 
-from typing import List, Tuple
 from DBSCANFiltering import DBSCANFiltering
 from feed import resize_frame
-class ErrorNoROICenters(Exception):
-    def __init__(self, *args: object) -> None:
-        super().__init__(*args)
+
+# Debugging
+from logging_config import set_up_loger
+import logging
+logger = logging.getLogger()
+set_up_loger()
+
+def nothing(x):
+    pass
 
 class ROIAutoDetector:
     """
     Automatically detect datamatrices in camera feed and extract ROI coordinates.
     
     Usage:
-    - Press 'c' to recapture frame and detect all datamatrices
     - Press 'q' to quit and accept detected ROIs
+    - Press any other key to recalculate ROIs
+    - Adjust `expected_n_rois` to set how many ROIs to expect
+    - Set `DEBUG` to True to see debug information on screen
+    - Set `DEBUGPROCESS` to True to see intermediate processing steps
     """
     
-    def __init__(self, expected_n_rois = 100, DEBUG: bool = False, DEBUGPROCESS: bool = False):
+    def __init__(self, expected_n_rois = 50, DEBUG: bool = False, DEBUGPROCESS: bool = False):
         self.debug = DEBUG
         self.debug_process = DEBUGPROCESS
-        self.frame_scale = 2       
         self.expected_n_rois = expected_n_rois  # Verwacht aantal ROI's
-             
+        self.threshold_value = None  # Standaard geen vaste tresh value    
+        self.frame_scale = 2       
+                             
     @staticmethod
     def __connected_components_filtering(frame, Min_area=100, Max_area=500_000, squareness=10, connect=8):
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(frame, connectivity=connect)
@@ -53,10 +62,28 @@ class ROIAutoDetector:
         # cv2.imshow("Connected Components", resize(full_mask, 1.0))
         return full_mask, points  
 
+    @staticmethod
+    def test_threshold_values(frame) -> int:
+        windowname = "Test Threshold Values"
+        cv2.namedWindow(windowname)
+        cv2.createTrackbar('ThresholdValue', windowname, 0, 255, nothing)
+        
+        while True: 
+            threshold_value = cv2.getTrackbarPos('ThresholdValue', windowname)
+            _, th = cv2.threshold(frame, threshold_value, 255, cv2.THRESH_BINARY)
+            cv2.imshow(windowname, resize_frame(th))
+            k = cv2.waitKey(1) & 0xFF
+            if k == ord('q'): # 27 is ESC
+                break
+        cv2.destroyAllWindows()
+        print(f"Selected threshold value: {threshold_value}")
+        return threshold_value
+    
     def __preprocess_frame(self, frame):
         """Preprocess frame for better contour detection."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
+        #! Moet misschien maar gewoon weglaten, omdat we al een blur toepassen
         # contrast verbeteren (verscherpen)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
         cl1  = clahe.apply(gray)
@@ -68,24 +95,19 @@ class ROIAutoDetector:
         if self.debug_process:
             cv2.imshow("GaussianBlur", resize_frame(blur)) 
         
-        # thresholding
-        _, th2 = cv2.threshold(blur, 185, 255, cv2.THRESH_BINARY)        
+        # thresholding 
+        if self.threshold_value is None:
+            self.threshold_value = 185 
+            if self.debug_process: 
+                self.threshold_value = self.test_threshold_values(blur)  # Uncomment to use trackbar for threshold value selection      
+        _, th = cv2.threshold(blur, self.threshold_value, 255, cv2.THRESH_BINARY)        
         if self.debug_process: 
-            cv2.imshow("Threshold blur 185", resize_frame(th2))
-        # _, th3 = cv2.threshold(blur, 185+15, 255, cv2.THRESH_BINARY)        
-        # if self.debug_process: 
-        #     cv2.imshow("Threshold blur 200", resize_frame(th3))
-        # _, th4 = cv2.threshold(blur, 185+30, 255, cv2.THRESH_BINARY)        
-        # if self.debug_process: 
-        #     cv2.imshow("Threshold blur 215", resize_frame(th4))
-        # _, th5 = cv2.threshold(blur, 185+35, 255, cv2.THRESH_BINARY)        
-        # if self.debug_process: 
-        #     cv2.imshow("Threshold blur 220", resize_frame(th5))
+            cv2.imshow(f"Threshold blur {self.threshold_value}", resize_frame(th))
 
-        # Groffe filtering met connected components
-        Grove_filter, _ = self.__connected_components_filtering(th2, Min_area=100, Max_area=40_000, squareness=15, connect=4)                    
+        # grove filtering met connected components
+        Grove_filter, _ = self.__connected_components_filtering(th, Min_area=100, Max_area=40_000, squareness=15, connect=4)                    
         if self.debug_process: 
-            cv2.imshow("Groffe_filter", resize_frame(Grove_filter))
+            cv2.imshow("Grove_filter", resize_frame(Grove_filter))
 
         # Make bounding rectangles around detected components
         contours, _ = cv2.findContours(Grove_filter, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -160,13 +182,11 @@ class ROIAutoDetector:
                 cv2.imshow("Centers", resize_frame(th)) 
                 
             rois.append((top, bottom, left, right))
-            
-        print(f"OpenCV found {len(rois)} ROIs")
-        
+                    
         return rois    
     
     @staticmethod
-    def __sort_rois_column_major(rois):
+    def __sort_rois_column_major(rois: list[tuple[int,int,int,int]]) -> dict[int, tuple[int,int,int,int]]:
         """Sort ROIs column-major but ensure each column is ordered top->bottom.
 
         This implements a simple 1D k-means on the x-centers (`cx`) to
@@ -177,7 +197,7 @@ class ROIAutoDetector:
         import numpy as np
 
         if not rois:
-            return []
+            return {}
 
         centers = []
         for roi in rois:
@@ -218,105 +238,118 @@ class ROIAutoDetector:
         # Order columns by centroid x (left to right)
         col_order = sorted(range(n_cols), key=lambda j: centroids[j])
 
-        sorted_rois = []
+        sorted_rois: list[tuple[int, int, int, int]] = []
         for j in col_order:
             idxs = assignments[j]
             # Map to (roi, cx, cy) and sort by cy (top to bottom)
             col_items = [centers[i] for i in idxs]
             col_items.sort(key=lambda x: x[2])
             sorted_rois.extend([x[0] for x in col_items])
+            
+        sorted_with_index = {idx+1 : roi for idx, roi in enumerate(sorted_rois)}
 
-        return sorted_rois
+        return sorted_with_index
+
 
     @staticmethod
     def __draw_rois_on_frame(frame, rois, frame_scale: float = 1.0):
         """Draw detected ROIs on frame with labels."""
         
-        for i, (top, bottom, left, right) in enumerate(rois):
+        for idx, (top, bottom, left, right) in rois.items():
+            # top, bottom, left, right = roi
             # Draw green rectangle
             cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
             # Draw label
-            cv2.putText(frame, f"ROI {i+1}", (left, top - 5), cv2.FONT_HERSHEY_SIMPLEX, float(1*frame_scale), (0, 255, 0), int(2*frame_scale))
+            cv2.putText(frame, f"ROI {idx}", (left, top - 5), cv2.FONT_HERSHEY_SIMPLEX, float(1*frame_scale), (0, 255, 0), int(2*frame_scale))
         
         return frame
       
     def __recalculate_rois(self, frame):
         """Herbereken ROI's op basis van het huidige frame."""
-        print("\n>>> Herberekenen van ROI's...")
-        rois = self.__detect_rois_opencv(frame)
-        rois = self.__sort_rois_column_major(rois)
-        detected_frame = self.__draw_rois_on_frame(frame, rois, frame_scale=self.frame_scale)
-        print(f">>> {len(rois)} ROI's gedetecteerd\n")
+        print("\nHerberekenen van ROI's...")
+        rois_list = self.__detect_rois_opencv(frame)
+        rois_dict = self.__sort_rois_column_major(rois_list)
+        detected_frame = self.__draw_rois_on_frame(frame, rois_dict, frame_scale=self.frame_scale)
+        print(f">>> {len(rois_list)} ROI's gedetecteerd\n")
         
-        return detected_frame, rois
+        return detected_frame, rois_dict
 
-    def run(self, frame) -> List[Tuple[int, int, int, int]]:
+    def run(self, frame) -> dict[int, tuple[int, int, int, int]]:
         """Detecteer ROI's. Roep zelf destroywindows aan"""
         
         frame_copy = frame.copy()       
         # Als nog geen ROI's gedetecteerd zijn, doe dit nu
         display_frame, rois = self.__recalculate_rois(frame_copy)
-        # display_frame = resize_frame(display_frame)
-        # Maak display frame
-        begin = 20*self.frame_scale
-        steps = 40*self.frame_scale
-        if self.debug: 
-            # display_frame = self.detected_frame.copy() if self.detected_frame is not None else frame
-            cv2.putText(display_frame, f"ROIs found: {len(rois)}", (begin, begin+steps), cv2.FONT_HERSHEY_SIMPLEX, float(1.5*self.frame_scale), (0, 255, 0), int(3*self.frame_scale))
-            cv2.putText(display_frame, "Press q to save", (begin, begin+2*steps), cv2.FONT_HERSHEY_SIMPLEX, float(1.2*self.frame_scale), (255, 255, 0), int(3*self.frame_scale))
-            cv2.putText(display_frame, "Press any to recalculate", (begin, begin+3*steps), cv2.FONT_HERSHEY_SIMPLEX, float(1.2*self.frame_scale), (255, 255, 0), int(3*self.frame_scale))
-            cv2.imshow("ROI Auto Detector", resize_frame(display_frame))
-        else: 
-            # self.__save_to_file()
-            print("\nROI List for code:")
-            for i, (top, bottom, left, right) in enumerate(rois):
-                print(f"roi_{i+1} = ({top}, {bottom}, {left}, {right})")
+        if rois:
+            # display_frame = resize_frame(display_frame)
+            # Maak display frame
+            begin = 20*self.frame_scale
+            steps = 40*self.frame_scale
+            if self.debug: 
+                # display_frame = self.detected_frame.copy() if self.detected_frame is not None else frame
+                cv2.putText(display_frame, f"ROIs found: {len(rois)}", (begin, begin+steps), cv2.FONT_HERSHEY_SIMPLEX, float(1.5*self.frame_scale), (0, 255, 0), int(3*self.frame_scale))
+                cv2.putText(display_frame, "Press q to save", (begin, begin+2*steps), cv2.FONT_HERSHEY_SIMPLEX, float(1.2*self.frame_scale), (255, 255, 0), int(3*self.frame_scale))
+                cv2.putText(display_frame, "Press any to recalculate", (begin, begin+3*steps), cv2.FONT_HERSHEY_SIMPLEX, float(1.2*self.frame_scale), (255, 255, 0), int(3*self.frame_scale))
+                cv2.imshow("ROI Auto Detector", resize_frame(display_frame))
+            else: 
+                # self.__save_to_file()
+                print("\nROI list for code:")
+                for idx, (top, bottom, left, right) in rois.items():
+                    print(f"roi {idx:>2} = ({top}, {bottom}, {left}, {right})")
      
         return rois
 
-    def capture_loop(self, frame) -> List[Tuple[int, int, int, int]]:
+    def capture_loop(self, frame, max_attempts: int = 5, automatic: bool = True) -> dict[int, tuple[int, int, int, int]]:
         """
         Process a single `frame` interactively and return detected ROIs when the
         user confirms (presses `q`).
 
         - `frame`: BGR image to process.
-        - `button`: key to trigger recalculation (default 'c').
-
+        - `max_attempts`: Maximum number of automatic recalculation attempts
+          when `automatic` is True. Every attempt adjusts the threshold by adding 5 to the threshold value.
+        
+        If max_attempts is reached without detecting the expected number of ROIs,
+        the debug process view is enabled for manual threshold selection.
+          
         Returns a list of detected ROIs as tuples `(top, bottom, left, right)`
-        when the user presses `q`. Returns an empty list otherwise.
+        when the user presses `q`. Returns an empty list otherwise to retreive new frame.
         """
 
-        try:
-            Results = self.run(frame)
-        except ErrorNoROICenters as e:
-            print(e)
-            return []
+        Results = self.run(frame)
+   
+        if automatic:  
+            counter = 0
+            while counter <= max_attempts: 
+                if counter == max_attempts:
+                    self.debug_process = True
+                    self.threshold_value = None  # Reset tresh value to allow manual selection
+                    logger.critical("Final attempt reached, enabling debug process view.")
+                    logger.critical("Automatic retrying disabled. Please select threshold value manually.")
+                    break    
+                
+                if len(Results) == self.expected_n_rois:
+                    logger.approved(f"Expected number of {self.expected_n_rois} ROIs detected in {counter+1} attempts. Returning automatically.") # type: ignore (logger.approved not in Logger by default)
+                    return Results
+                else: 
+                    counter += 1
+                    logger.denied(f"Fail {counter}: Detected {len(Results)} ROIs, expected {self.expected_n_rois}.") # type: ignore (logger.denied not in Logger by default)
+                    if isinstance(self.threshold_value, int):
+                        self.threshold_value += 5 # Verhoog tresh value elke poging
+                    logger.info(f"Adjusting tresh value to {self.threshold_value} and retrying...")
+                    Results = self.run(frame)
 
-        # Wait for user to press 'q' (accept) or the recalc `button`.
-        # Use a short waitKey timeout and loop so we remain responsive
-        # and do not return on spurious keycodes.
-        # while True:
-         
-        if len(Results) == self.expected_n_rois:
-            print(f"Expected number of ROIs ({self.expected_n_rois}) detected.")
-            return Results
-        
+        Results = self.run(frame)
         key = cv2.waitKey(0) & 0xFF
         if key == ord('q'):
             cv2.destroyAllWindows()
             return Results
         else:
-            return []
-        # No relevant key pressed: continue waiting
+            return {}
 
     
         
         
 if __name__ == "__main__":
-    from logging_config import init_environment, set_up_loger
-    init_environment()
-    set_up_loger()
-
     # cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     # # set capture properties
     # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 3920) # 640, 1280
@@ -324,28 +357,25 @@ if __name__ == "__main__":
 
     from feed import LiveFeed, VideoFeed
     # feed = LiveFeed("Test Feed", True, 1)
-    feed = VideoFeed("Recorded Video 2 (Camera 4K Webcam)", False, "Jasmijn/videos/recorded_output4.avi", loop=True)
+    # feed = VideoFeed("Recorded Video 2 (Camera 4K Webcam)", True, "Jasmijn_code/videos/recorded_output4.avi", loop=True)
+    feed = VideoFeed("Recorded Video 2 (Camera 4K Webcam)", True, "Jasmijn_code/videos/test_mjpg_1.avi", loop=True)
     stream = feed.openFeed()
     
-    detector1 = ROIAutoDetector(DEBUG=True, DEBUGPROCESS=True)
-    results = []
+    detector1 = ROIAutoDetector(expected_n_rois=51, DEBUG=True, DEBUGPROCESS=False)
+    results = {}
     
     try:
         while True:
-            # ret, frame = cap.read()
-            # if not ret:
-            #     break
             frame = next(stream)
             
-            if results == []: 
+            if results == {}: 
                 print("In capture loop, waiting for user input...")
-                results = detector1.capture_loop(frame)
-            elif results != []:
+                results = detector1.capture_loop(frame, max_attempts=5, automatic=True)
+            elif results != {}:
                 print(f"{len(results)} ROI's detected, exiting capture loop.")
                 break
     finally:
-        # cap.release()
         cv2.destroyAllWindows()
 
-    # for i, (x, y, w, h) in enumerate(results, start=1):
-    #     print(f"{i:>02}: x = {x:>4}, y = {y:>4}, w = {w:>4}, h = {h:>4}")
+    for i, (top, bottom, left, right) in results.items():
+        print(f"{i:>02}: xmin = {top:>4}, xmax = {bottom:>4}, ymin = {left:>4}, ymax = {right:>4}")

@@ -73,9 +73,9 @@ class DecoderBase(ABC):
                         self.results[index] = decoded[0] if decoded else ""
                         # Only log successful decodes
                         if decoded:
-                            logger.approved(f"{self.name} - ✓ ROI {index+1:>2}: '{self.results[index]}'") # type: ignore
+                            logger.approved(f"{self.name} - ✓ ROI {index:>2}: '{self.results[index]}'") # type: ignore (logger.approved not in Logger by default)
                         else: 
-                            logger.denied(f"{self.name} - ✗ ROI {index+1}: Failed") # type: ignore
+                            logger.denied(f"{self.name} - ✗ ROI {index}: Failed") # type: ignore (logger.denied not in Logger by default)
                         continue
                 
                 #-=x Enhanced decode with retries until timeout
@@ -95,11 +95,11 @@ class DecoderBase(ABC):
                     if decoded and decoded[0]:
                         decoded_value = decoded[0]
                         if any(c in decoded_value for c in ['<', '>', '{', '}', '|', '\\', '\',' '^', '`', ';', "'", '*', '!', '@', '#', '$', '%', '&']):
-                            logger.critical(f"{self.name} - ROI {index+1:>2}: Suspicious characters in decoded value '{decoded_value}'")
+                            logger.critical(f"{self.name} - ROI {index:>2}: Suspicious characters in decoded value '{decoded_value}'")
                             continue
                         
                         if len(decoded_value) < 12:
-                            logger.critical(f"{self.name} - ROI {index+1:>2}: Decoded value '{decoded_value}' is too short")
+                            logger.critical(f"{self.name} - ROI {index:>2}: Decoded value '{decoded_value}' is too short")
                             continue
 
                         with self.lock:
@@ -107,7 +107,7 @@ class DecoderBase(ABC):
                             if index not in self.results or not self.results[index]:
                                 self.results[index] = decoded_value
                                 elapsed = time.time() - start_time
-                                logger.approved(f"{self.name} - ✓ ROI {index+1:>2}: '{decoded_value}' (attempt {attempts}, {elapsed*1000:.4f}ms)") # type: ignore
+                                logger.approved(f"{self.name} - ✓ ROI {index:>2}: '{decoded_value}' (attempt {attempts}, {elapsed*1000:.4f}ms)") # type: ignore (logger.approved not in Logger by default)
                         break
                     
                     # Small delay before retry to avoid hammering
@@ -119,10 +119,10 @@ class DecoderBase(ABC):
                         if index not in self.results or not self.results[index]:
                             self.results[index] = ""
                             elapsed = time.time() - start_time
-                            logger.denied(f"{self.name} - ✗ ROI {index+1:>2}: Failed after {attempts} attempts ({elapsed*1000:.4f}ms)") # type: ignore
+                            logger.denied(f"{self.name} - ✗ ROI {index:>2}: Failed after {attempts} attempts ({elapsed*1000:.4f}ms)") # type: ignore (logger.denied not in Logger by default)
                             
             except Exception as e:
-                logger.error(f"{self.name} decode error for ROI {index+1:>2}: {e}", exc_info=True)
+                logger.error(f"{self.name} decode error for ROI {index:>2}: {e}", exc_info=True)
                 with self.lock:
                     if index not in self.results or not self.results[index]:
                         self.results[index] = ""
@@ -321,7 +321,7 @@ def test_decoders():
     print("\n\nPixel Color Decoder Results:")
     pixel_results_sorted = dict(sorted(pixel_results.items()))
     for index, result in pixel_results_sorted.items():
-        print(f"Index {index+1:>2}: {result}")
+        print(f"Index {index:>2}: {result}")
 
     print(f"\nRetrieved results in {(t3 - t2):.5f} seconds.\n")
     

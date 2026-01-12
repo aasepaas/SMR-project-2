@@ -1,7 +1,7 @@
 class ScanProfile:
     """Stores focus + exposure + brightness settings for a scan target."""
 
-    def __init__(self, name: str, data_timeout: float, total_timeout: float, scan_type: str, rois: list[tuple[int, int, int, int] | None],
+    def __init__(self, name: str, data_timeout: float, total_timeout: float, scan_type: str, rois: dict[int, tuple[int, int, int, int] | None],
                  camera_index: int = 0, focus: int | None = None, exposure: int | None = None, brightness: int | None = None, validate_n_times: int = 1, ) -> None:
         self.name = name
         self.camera_index = camera_index
@@ -13,7 +13,7 @@ class ScanProfile:
         self.data_timeout = data_timeout
         self.total_timeout = total_timeout
         self.scan_type = scan_type # "datamatrix" or "barcode"
-        self.rois = rois
+        self.rois: dict = rois
         self.validate_n_times = validate_n_times
 
 
@@ -27,7 +27,7 @@ carton_box_focus = 80
 # Standard profile
 standard_profile = ScanProfile(
     name="Standard",
-    rois=[],
+    rois={},
     camera_index = webcam_kiyo1,
     data_timeout=0.5,
     total_timeout=0.5,
@@ -42,9 +42,10 @@ top, left = middentp-height, middenlr-width
 bottom, right = middentp+height, middenlr+width
 # top, left = 340, 570
 # bottom, right = top+60, left+60
-roi_list = []
-for i in range(50):
-    roi_list.append((top, bottom, left, right))
+roi_dict = {}
+
+for idx in range(50):
+    roi_dict[idx+1] = (top, bottom, left, right)
     
 wallet_profile = ScanProfile(
     name="Wallet",
@@ -52,10 +53,10 @@ wallet_profile = ScanProfile(
     focus=210,
     # exposure=-5,
     # brightness=100,
-    data_timeout=0.5,
+    data_timeout=10.0,
     total_timeout=5,
     scan_type="datamatrix",
-    rois=[(top, bottom, left, right)], # top, bottom, left, right
+    rois={1: (top, bottom, left, right)}, # top, bottom, left, right
     # rois=[(380, 380+110, 660, 660+110)], # top, bottom, left, right
     validate_n_times=1,
 )
@@ -64,13 +65,13 @@ wallet_profile = ScanProfile(
 giftbox_profile = ScanProfile(
     name="GiftBox",
     camera_index=webcam_4k,
-    rois=[],
+    rois={},
     # focus=carton_box_focus,
     # exposure=-9, # 0 of -6! THUIS 0
     # brightness=195, # 200 of 195! THUIS 195
     # exposure=-6, # 0 of -6!
     # brightness=195, # 200 of 195!
-    data_timeout=0.5,
+    data_timeout=10.0,
     total_timeout = 15.0, 
     scan_type="datamatrix",
     validate_n_times=3,
@@ -92,8 +93,8 @@ barcode_profile = ScanProfile(
     # focus=carton_box_focus,
     # exposure=0,
     # brightness=200,
-    data_timeout=1.0,
+    data_timeout=10.0,
     total_timeout=5.0,
     scan_type="barcode",
-    rois=[(top, bottom, left, right)], 
+    rois={1: (top, bottom, left, right)}, 
 )

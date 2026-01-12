@@ -1,3 +1,4 @@
+import math
 import os
 os.environ["OPENCV_LOG_LEVEL"] = "SILENT"  # OpenCV warnings uitschakelen
 
@@ -18,6 +19,8 @@ import logging
 logger = logging.getLogger()
 set_up_loger()
 
+def nothing(x):
+    pass
 
 # =====================================================================
 #  Camera Scanner
@@ -43,9 +46,10 @@ class CameraScanner:
         self.detector = detector
         self.feed_list = feed_list
         self.profile: ScanProfile = profile
-        self.rois: list = profile.rois
-        self.DEBUG: bool = debug
-        self.isactive: bool = True
+        self.rois: dict[int, tuple[int, int, int, int]] = profile.rois
+        self.DEBUG_show_images: bool = debug
+        self.threshold_value: int | None = None
+        self.adaptive_threshold_values: tuple[int, int] | None = None
         # =============================================================
         # Setting up starting booleans and values
         # =============================================================
@@ -56,19 +60,18 @@ class CameraScanner:
         # setting up boolean flags and storage variables
         self.running: bool = True
         self.detected_all: bool = False
-        self.datamatrixes: list = [] # Stores detected datamatrix codes
-
-        # Store last detected code and its timestamp
-        self.last_code: str = ""
-        self.last_code_time: float = 0
         
         # Track when ROI was last changed
         self.roi_transition_time: float = time.time()
         # How many seconds to wait on a ROI without a successful datamatrix decode
         self.roi_timeout: float = float(roi_timeout)
-                
+        # Use a dict mapping index -> image to avoid index-assignment errors
+        self.ROIs_send_to_decoder: dict[int, object] = {}
+           
         # Persistent results across scanning rounds
         self.persistent_results: dict[int, str] = {}  # Results that stay saved (only reset on profile switch)
+        # Store last detected timestamp
+        self.last_code_time: float = 0
         # Has the last full set of codes been retrieved by caller?
         self.codes_retrieved: bool = False
         
@@ -104,22 +107,21 @@ class CameraScanner:
     # =====================================================================
     #  Main loop
     # =====================================================================    
-    
-    def __retrieve_rois(self, frame):
+    def __retrieve_rois(self, frame) -> dict[int, tuple[int,int,int,int]]:
         try:
             # if self.profile.name != standard_profile.name:
             #     # Temporarily use standard_profile for consistent ROI detection
             #     self.feed_list[self.profile.camera_index].configure_camera(profile=standard_profile, set_resolution=False)
             #     self.profile = standard_profile
             #     time.sleep(0.5)  # small delay for camera to stabilise
-            #     return []
+            #     return {}
             
-            if self.DEBUG:
-                rois = self.detector.capture_loop(frame)
+            if self.DEBUG_show_images:
+                rois = self.detector.capture_loop(frame, max_attempts=2, automatic=True)
             else:
                 rois = self.detector.run(frame)    
             if not rois:
-                return []
+                return {}  # Return dummy ROI on failure
             
             # print(f"{len(rois)} ROI's detected, exiting capture loop.")
             cv2.destroyAllWindows()
@@ -131,17 +133,110 @@ class CameraScanner:
 
         except Exception as e:
             logger.error(f"Auto ROI detection failed in scanner: {e}")
+    
+        return {}  # Return dummy ROI on failure
 
     #! Single batch
-    def __create_roi_grid(self, frame, display_hor = False) -> MatLike:
+    def __show_all_rois(self, rois_list) -> None:
+        """Create a single grid image from `rois_list` and show it.
+
+        `rois_list` may be either a dict mapping index->image or a
+        sequence (list/tuple) of images. The function arranges images in
+        a grid similar to `__show_all_rois_in_grid` and displays one
+        combined window named "ROI Grid".
+        """
+        if not rois_list:
+            return
+
+        # Accept dict or list/tuple. Build (idx, img) sequence preserving order.
+        if isinstance(rois_list, dict):
+            items = list(rois_list.items())
+        else:
+            items = list(enumerate(rois_list))
+
+        total = len(items)
+        cols = min(5, max(1, math.ceil(total / 10)))
+        rows = min(10, max(1, math.ceil(total / cols)))
+
+        # Determine target thumbnail size (use max dimensions among inputs)
+        heights = []
+        widths = []
+        for _, img in items:
+            if img is None:
+                continue
+            h, w = img.shape[:2]
+            heights.append(h//1.1)  # scale down a bit for fitting
+            widths.append(w//1.1)  # scale down a bit for fitting
+
+        if not heights or not widths:
+            return
+
+        target_h = int(max(heights))
+        target_w = int(max(widths))
+
+        # Create canvas
+        canvas_h = rows * target_h
+        canvas_w = cols * target_w
+        canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.uint8)
+
+        for i, (idx, img) in enumerate(items):
+            if i >= cols * rows:
+                break
+
+            # Compute grid position (same vertical filling logic as in grid function)
+            if False:  # keep structure similar if needed later
+                row = i // cols
+                col = i % cols
+            else:
+                col = i // rows
+                row = i % rows
+
+            y_start = row * target_h
+            y_end = y_start + target_h
+            x_start = col * target_w
+            x_end = x_start + target_w
+
+            if img is None:
+                continue
+
+            # Ensure 3-channel BGR
+            if img.ndim == 2:
+                img_bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+            elif img.shape[2] == 3:
+                img_bgr = img
+            else:
+                # fallback: take first 3 channels or convert to BGR
+                try:
+                    img_bgr = img[:, :, :3]
+                except Exception:
+                    img_bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+
+            try:
+                thumb = cv2.resize(img_bgr, (target_w, target_h), interpolation=cv2.INTER_AREA)
+            except Exception:
+                # If resize fails, skip
+                continue
+
+            canvas[y_start:y_end, x_start:x_end] = thumb
+
+            # Border color: green if decoded in persistent_results, else red
+            color = (0, 255, 0) if (isinstance(idx, int) and idx in self.persistent_results and self.persistent_results[idx]) else (0, 0, 255)
+            cv2.rectangle(canvas, (x_start+1, y_start+1), (x_end-1, y_end-1), color, 2)
+
+        cv2.imshow("ROI Grid2", canvas)
+        cv2.waitKey(1)
+                
+    def __show_all_rois_in_grid(self, frame, display_hor = False) -> None:
         """Create a 5x10 grid visualization of all ROIs."""
         total = len(self.rois)
-        cols = max(total//10, 1)
-        rows = max(total//5, 1)
+        cols = min(5, max(1, math.ceil(total / 10)))
+        rows = min(10, max(1, math.ceil(total / cols)))
         # print(f"{total} ROIs to display in grid of {cols} cols and {rows} rows")
         
         # print(f"width = {frame.shape[1]}, height = {frame.shape[0]}")
-        top, bottom, left, right = self.__roi_box_size(frame.shape[0], frame.shape[1], self.rois[0])
+        first_idx, first_roi  = next(iter(self.rois.items()))
+
+        top, bottom, left, right = self.__roi_box_size(frame.shape[0], frame.shape[1], first_roi)
         roi_width, roi_height = right - left, bottom - top
         # print(f"Each ROI box size: {roi_width}x{roi_height}")
         
@@ -149,16 +244,16 @@ class CameraScanner:
         canvas = np.zeros((rows * roi_height, cols * roi_width, 3), dtype=np.uint8)
         
         # Fill grid with ROIs
-        for idx, roi in enumerate(self.rois):
-            if idx >= cols * rows:  # Stop if more than 50 ROIs
+        for i, (idx, roi) in enumerate(self.rois.items()):
+            if i >= (cols * rows):  # Stop if more than 50 ROIs
                 break
             
             if display_hor: # Horizontal filling
-                row = idx // cols  # Which row (0-4 -> row 0, 5-9 -> row 1, etc.)
-                col = idx % cols   # Which column within that row (0-4)
+                row = i // cols  # Which row (0-4 -> row 0, 5-9 -> row 1, etc.)
+                col = i % cols   # Which column within that row (0-4)
             else: # Vertical filling
-                col = idx // rows  # Which column (0-9 -> col 0, 10-19 -> col 1, etc.)
-                row = idx % rows   # Which row within that column (0-9)
+                col = i // rows  # Which column (0-9 -> col 0, 10-19 -> col 1, etc.)
+                row = i % rows   # Which row within that column (0-9)
             
             # Extract ROI
             top, bottom, left, right = self.__roi_box_size(frame.shape[0], frame.shape[1], roi)
@@ -167,8 +262,6 @@ class CameraScanner:
             
             # Resize to fit grid cell
             resized = cv2.resize(gray_roi, (roi_width, roi_height))
-            
-            # Convert grayscale to BGR for colored border
             resized_bgr = cv2.cvtColor(resized, cv2.COLOR_GRAY2BGR)
             
             # Place in grid
@@ -184,14 +277,15 @@ class CameraScanner:
             else:
                 color = (0, 0, 255)  # Red border for undecoded
             cv2.rectangle(canvas, (x_start+1, y_start+1), (x_end-1, y_end-1), color, 2)
-        
-        return canvas
+
+        cv2.imshow("ROI Grid", canvas)
+        cv2.waitKey(1) # in milliseconds
     
     #! Single batch   
     def __process_frame(self, frame):
         """Extract and convert current ROI to grayscale."""
 
-        for index, roi in enumerate(self.rois):
+        for index, roi in self.rois.items():
             # Skip ROIs that are already successfully decoded
             if index in self.persistent_results and self.persistent_results[index]:
                 continue
@@ -206,37 +300,38 @@ class CameraScanner:
                 pass
             
             elif self.profile.name == barcode_profile.name:
-                # Additional preprocessing for DataMatrix codes
-                # norm = cv2.rotate(norm, cv2.ROTATE_90_COUNTERCLOCKWISE)
                 # contrast verbeteren (verscherpen)
-                # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-                # norm  = clahe.apply(norm)
-                tresh = cv2.threshold(norm, 128, 255, cv2.THRESH_BINARY)[1]
-                cv2.imshow("Barcode threshold", tresh)
-                # test of tresholding beter werkt voor barcodes?
-                min_thresh_value, max_thresh_value, thresh_steps = 77, 138, 16
-                min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps = 9, 599, 16
-                thresh_values = (min_thresh_value, max_thresh_value, thresh_steps)
-                adap_thresh_values = (min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps)
-
-                test = self.test_low_contrast_wallet(norm, thresh_values, adap_thresh_values, max_per_row=6)
-                cv2.imshow("Selected low-contrast threshold", test)
-                # norm  = test3
-                # width, height = norm.shape[1], norm.shape[0]
-                # norm = norm[height//2+(height//10):height, 0:width]
-                # norm = cv2.normalize(norm, norm, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U) 
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                norm  = clahe.apply(norm)
                 
+                if self.threshold_value is None:
+                    self.threshold_value = 128
+                    # self.threshold_value = self.test_threshold_values(norm) # Uncomment to use trackbar for threshold value selection      
+    
+                tresh = cv2.threshold(norm, self.threshold_value, 255, cv2.THRESH_BINARY)[1]
+                if self.DEBUG_show_images:
+                    cv2.imshow("Barcode threshold", tresh)
+                
+                if self.adaptive_threshold_values is None:
+                    self.adaptive_threshold_values = (11, 3)  # (blockSize, C)
+                    # self.adaptive_threshold_value = self.test_adaptive_threshold_values(norm) # Uncomment to use trackbar for adaptive threshold value selection
+                blocksize, c = self.adaptive_threshold_values
+                adaptive_tresh = cv2.adaptiveThreshold(norm, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, blocksize, c)
+                if self.DEBUG_show_images:
+                    cv2.imshow("Barcode adaptive threshold", adaptive_tresh)
+                                
             elif self.profile.scan_type == wallet_profile.scan_type:
-                    min_thresh_value, max_thresh_value, thresh_steps = 5, 250, 16
-                    min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps = 9, 599, 16
-                    thresh_values = (min_thresh_value, max_thresh_value, thresh_steps)
-                    adap_thresh_values = (min_adap_thresh_value, max_adap_thresh_value, adap_thresh_steps)
-
-                    test = self.test_low_contrast_wallet(norm, thresh_values, adap_thresh_values, max_per_row=6)
-                    cv2.imshow("Selected low-contrast threshold", test)
-
-            cv2.imshow("Giftbox ROI", norm)
-            cv2.waitKey(1)
+                # Uncomment to test low-contrast wallet thresholds and adaptive thresholds 
+                # test = self.test_low_contrast_wallet(norm, thresh_values=(5, 250, 16), adap_thresh_values=(9, 599, 16), max_per_row=6) # thresh_values and adap_thresh_values are: min, max, amount of steps
+                # if self.DEBUG_show_images:
+                #     cv2.imshow("Selected low-contrast threshold", test)
+                pass
+            
+            # store per-index image in dict
+            self.ROIs_send_to_decoder[index] = norm
+            # if self.DEBUG_show_images:
+                # cv2.imshow(f"Last ROI send to decoder {index}", norm)
+                # cv2.waitKey(1)
                 
             while True:
                 if self.profile.scan_type == barcode_profile.scan_type:
@@ -442,8 +537,14 @@ class CameraScanner:
             # If no ROIs assigned yet, try to retrieve them
             # =============================================================
             if not self.rois and self.profile == giftbox_profile:
+                # Always grap a new frame.
+                stream_iterator = iter(self.streams[self.profile.camera_index])
+                frame = next(stream_iterator)
+                if frame is None:
+                    continue
                 rois = self.__retrieve_rois(frame)
                 if rois:
+                    print(f"Type = {type(rois)}, Length = {len(rois)}")
                     self.rois = rois
                     self.switch_time = time.time()
                 else:
@@ -453,12 +554,9 @@ class CameraScanner:
                                 
             if self.timeout_reached or self.detected_all: 
                 time.sleep(0.1) #? Reduce CPU usage when timed out or all decoded 
+                self.__expire_code_if_needed() # Expire stored code if not collected
                 continue
             
-            # print(f"{len(self.rois) = } en {len(self.persistent_results) = }, result = {len(self.rois)} >= {(len(self.persistent_results) - 1)}")
-            # if len(self.rois) <= 1:
-            #     pass
-            # else: 
             if len(self.persistent_results) >= len(self.rois):
                 self.detected_all = True
                 self.codes_retrieved = False
@@ -478,8 +576,11 @@ class CameraScanner:
 
             total_rois = len(self.rois)
             processing_rois = total_rois - len(self.persistent_results)
-                
-            self.show_frame(frame, total_rois)         
+
+            # Display frames - Before we have results (to show ROI's)
+            if self.DEBUG_show_images:
+                self.__show_all_rois_in_grid(frame)    
+                self.__show_frame(frame, total_rois)         
             # Wrap the processing in a broad exception catcher so unexpected errors get logged instead of silently terminating the thread.
             try:
                 # Start decoders
@@ -490,21 +591,12 @@ class CameraScanner:
                 
                 # Initialize batch_results with persistent results (keep successful decodes)
                 self.batch_results = self.persistent_results.copy()
-                
-
-                
+                                
                 if single_batch: #! Single batch
                     # logger.debug(f"Single batch processing of {processing_rois} ROIs")
                     
                     t2 = time.perf_counter()
                     self.__process_frame(frame) 
-                    # Show all ROIs in grid
-                    roi_grid = self.__create_roi_grid(frame)
-                    cv2.imshow("ROI Grid", roi_grid)
-                    cv2.waitKey(1) # in milliseconds
-                    
-                    # Expire stored code
-                    self.__expire_code_if_needed()
 
                     # Decode
                     decoded = self.__decode_roi()
@@ -512,18 +604,18 @@ class CameraScanner:
                     if (not decoded) or (isinstance(decoded, dict) and all(not v for v in decoded.values())):
                         pass
                     else:
+                        self.last_code_time = time.time()
                         t3 = time.perf_counter()
                         logger.warning(f"Frame decode time: {(t3 - t2):.4f} s")         
                         self.flush_decoder_queues()
                         
                         # Keep decoded as a dict ordered by ROI index (ascending)
                         decoded = dict(sorted(decoded.items()))  # dict(int: str)
-                        # print(f"Decoded: {decoded}")
                         
-                        for roi_idx, value in decoded.items():
-                            if value:
-                                self.persistent_results[roi_idx] = value
-                                                            
+                        # Save successful decodes to persistent results
+                        self.persistent_results |= {roi_idx: value for roi_idx, value in decoded.items() if value}
+                        print(f"Decoded this round: {decoded}")  
+                                    
                 else: #! Multiple batches
                     # logger.debug(f"Multiple batch processing of {total_rois} ROIs")
                     
@@ -576,46 +668,45 @@ class CameraScanner:
                 # break out of loop on unexpected exception to avoid spinning
                 break
                                       
-            # Display frames - only when we have final results
-            self.show_frame(frame, total_rois)
-            # if self.persistent_results:
-            print(f"Decoded: {self.persistent_results}")  
+            # Display frames - When we have results
+            if self.DEBUG_show_images:
+                self.__show_all_rois(self.ROIs_send_to_decoder)    
+                self.__show_all_rois_in_grid(frame)    
+                self.__show_frame(frame, total_rois)         
                       
         # No longer running                
         logger.info("CameraScanner.run exiting")
         print(f"Number of detected codes: {len(self.persistent_results)} / {len(self.rois)}")
         self.persistent_results = dict(sorted(self.persistent_results.items()))
-        for i in range(len(self.rois)):
-            print(f"ROI {i+1:>2}: {self.persistent_results.get(i, '<no code>')}")
+        for i in range(1, len(self.rois) + 1):
+            print(f"ROI {i:>2}: {self.persistent_results.get(i, '<no code>')}")
 
-    def show_frame(self, frame, total_rois) -> None:
+    def __show_frame(self, frame, total_rois) -> None:
         """Display the current frame with scaling."""
+        
         final_results = {i: self.persistent_results.get(i, "") for i in range(total_rois)}
         final_results = dict(sorted(final_results.items()))
-        # print(f"Decoded: {final_results}")
 
-        if self.DEBUG:
-            if frame is not None:
-                h, w = frame.shape[:2] 
+        if frame is not None:
+            h, w = frame.shape[:2] 
+            for i, roi_box in self.rois.items():
+                decoded_str = None
                 
-                for i, roi_box in enumerate(self.rois):
-                    decoded_str = None
-                    
-                    # Draw all ROIs in red, decoded ones in green
-                    top, bottom, left, right = self.__roi_box_size(h, w, roi_box)
-                    if final_results:    
-                        decoded_str = final_results.get(i, "")
-                        # print(f"ROI {i+1} decoded string: {decoded_str}")
-                    color = (0, 255, 0) if decoded_str else (0, 0, 255) 
-                    cv2.rectangle(frame, (left, top), (right, bottom), color, thickness=3)
-                    if decoded_str:
-                        cv2.putText(frame, decoded_str, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8*self.frame_scale, color, int(2*self.frame_scale))
+                # Draw all ROIs in red, decoded ones in green
+                top, bottom, left, right = self.__roi_box_size(h, w, roi_box)
                 
-                # Show image
-                cv2.imshow("Camera", resize_frame(frame))
-                cv2.waitKey(1)  # in milliseconds
-
+                if final_results:    
+                    decoded_str = final_results.get(i, "")
+                    # print(f"ROI {i+1} decoded string: {decoded_str}")
+                color = (0, 255, 0) if decoded_str else (0, 0, 255) 
+                cv2.rectangle(frame, (left, top), (right, bottom), color, thickness=3)
+                if decoded_str:
+                    cv2.putText(frame, decoded_str, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8*self.frame_scale, color, int(2*self.frame_scale))
             
+            # Show image
+            cv2.imshow("Camera", resize_frame(frame))
+            cv2.waitKey(1)  # in milliseconds
+          
     def __handle_key(self) -> None:
         """Process keyboard input from the capture loop."""          
         key = cv2.waitKey(1) & 0xFF
@@ -673,7 +764,8 @@ class CameraScanner:
         self.dm_decoder.stop()
         self.barcode_decoder.stop()
         
-        self.rois = self.profile.rois
+        # Ensure rois uses the same concrete mapping type as during initialization
+        self.rois: dict[int, tuple[int, int, int, int]] = self.profile.rois
         self.switch_time = time.time()
         self.timeout_reached = False
         self.detected_all = False
@@ -842,7 +934,50 @@ class CameraScanner:
                 padded_rows.append(r)
 
         return cv2.vconcat(padded_rows)
-            
+
+    @staticmethod
+    def test_threshold_values(frame) -> int:
+        windowname = "Test Threshold Values"
+        cv2.namedWindow(windowname)
+        cv2.createTrackbar('ThresholdValue', windowname, 0, 255, nothing)
+        
+        while True: 
+            threshold_value = cv2.getTrackbarPos('ThresholdValue', windowname)
+            _, th = cv2.threshold(frame, threshold_value, 255, cv2.THRESH_BINARY)
+            cv2.imshow(windowname, resize_frame(th))
+            k = cv2.waitKey(1) & 0xFF
+            if k == ord('q'):
+                break
+        cv2.destroyAllWindows()
+        print(f"Selected threshold value: {threshold_value}")
+        return threshold_value
+    
+    @staticmethod
+    def test_adaptive_threshold_values(frame) -> tuple[int, int]:
+        windowname = "Test Threshold Values"
+        cv2.namedWindow(windowname)
+        # The blockSize determines the size of the neighbourhood area
+        cv2.createTrackbar('blocksize value', windowname, 1, 255, nothing)
+        # C is a constant that is subtracted from the mean or weighted sum of the neighbourhood pixels.
+        cv2.createTrackbar('c value', windowname, -127, 127, nothing)
+                
+        while True: 
+            bs = cv2.getTrackbarPos('blocksize value', windowname)
+            bs = 3 if bs <= 1 else bs # min 3
+            bs = bs + 1 if bs % 2 == 0 else bs # make odd
+            blocksize_value = bs
+            c_value = cv2.getTrackbarPos('c value', windowname)
+            th = cv2.adaptiveThreshold(frame, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, blockSize=blocksize_value, C=c_value)
+            # th = cv2.adaptiveThreshold(frame, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, blockSize=blocksize_value, C=c_value)
+            cv2.imshow(windowname, resize_frame(th))
+            k = cv2.waitKey(1) & 0xFF
+            if k == ord('q'): 
+                break
+        cv2.destroyAllWindows()
+        print(f"Selected blocksize value: {blocksize_value}")
+        print(f"Selected c value: {c_value}")
+        return blocksize_value, c_value  
+
     # ==============================================================
     # Decoders (per profile) and update code
     # ==============================================================
@@ -859,14 +994,18 @@ class CameraScanner:
         else:
             return {}
 
+    #! Controleren of deze weer werkt
     def __expire_code_if_needed(self) -> None:
-        """ Clear `last_code` when it has exceeded `profile.data_timeout`. """
-        if self.last_code:
+        """ Clear `persistent_results` when it has exceeded `profile.data_timeout`. """
+        if self.persistent_results:
             elapsed = time.time() - self.last_code_time
-            if elapsed > (self.profile.data_timeout or 0):
-                logger.info(f"Code expired: {self.last_code}")
-                self.last_code = ""
-
+            if elapsed > (self.profile.data_timeout):
+                logger.info(f"Code expired after {elapsed} seconds:")
+                logger.debug("Expired the codes:") # {self.persistent_results}")              
+                self.persistent_results = dict(sorted(self.persistent_results.items()))
+                for i in range(1, len(self.rois) + 1):
+                    print(f"ROI {i:>2}: {self.persistent_results.get(i, '<no code>')}")
+                self.persistent_results = {}
     # ==============================================================
     # Others
     # ==============================================================
@@ -879,18 +1018,11 @@ class CameraScanner:
         return self.state
     
     # Gebruik deze methode voor het ophalen van de laatste code   
-    def get_code(self) -> dict[int, str] | None: # | str | None:
-        # Return the full persistent results once when a full decode has completed.
-        # Use `codes_retrieved` to ensure the caller only receives the set once
-        # and avoid toggling `detected_all` which causes the main loop to re-log.
+    def get_code(self) -> dict[int, str] | None:
         if self.detected_all and not self.codes_retrieved:
             self.codes_retrieved = True
-            # return a shallow copy to avoid caller mutating internal state
-            return dict(self.persistent_results)
-            # if self.profile.name == "GiftBox":
-            #     return self.datamatrixes    
-            # else: 
-            #     return self.last_code
+            self.detected_all = False
+            return self.persistent_results
         return None
     
     # =====================================================================
