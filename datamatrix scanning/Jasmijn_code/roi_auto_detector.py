@@ -56,11 +56,7 @@ class ROIAutoDetector:
             x, y, w, h = stats[label, cv2.CC_STAT_LEFT], stats[label, cv2.CC_STAT_TOP], stats[label, cv2.CC_STAT_WIDTH], stats[label, cv2.CC_STAT_HEIGHT]           
             points.append((x, y, w, h))
             full_mask[labels == label] = 255
-            
-            # if squareness == 1: 
-            #     print(f"Contour found - Area: {area}, x:{x}, y:{y}, w:{w}, h:{h}")
-            
-        # cv2.imshow("Connected Components", resize(full_mask, 1.0))
+                        
         return full_mask, points  
 
     @staticmethod
@@ -142,10 +138,7 @@ class ROIAutoDetector:
         th, points, centers_list = self.__preprocess_frame(frame)
         rois = []
         if not centers_list:
-            # Geen centers gevonden — geef een lege lijst terug in plaats van een exception
-            # Zo voorkomt de hele applicatie te crashen bij wisselende lichtomstandigheden.
-            if self.debug_process:
-                print("No ROIS detected to get centers from. Returning empty list.")
+            print("No ROIS detected to get centers from. Returning empty list.")
             return []
         
         
@@ -155,33 +148,22 @@ class ROIAutoDetector:
         DBSCANFiltering.fig_to_cv2(fig)
                     
         for idx in valid_indices:
-            
-            # =========================================================
             #  Get all needed coordinates: 
-            # =========================================================
-            x, y, cw, ch = points[idx]
+            x, y, width, height = points[idx]
             cX, cY = centers_list[idx]
             
             # Padding als percentage van contour dimensies
             padding = 0.10
-            pad_w = int(cw * padding)
-            pad_h = int(ch * padding)
+            pad_w = int(width * padding)
+            pad_h = int(height * padding)
             
-            top = y - pad_h
-            bottom = y + ch + pad_h
-            left = x - pad_w
-            right = x + cw + pad_w
+            top, bottom = y - pad_h, y + height + pad_h
+            left, right = x - pad_w, x + width + pad_w
             
-            # =========================================================
             #  Draw all the information
-            # =========================================================
-            label = str((int(cX), int(cY)))
-            textbox = (cX, cY - 45) # 25
-
-            cv2.rectangle(th, (x, y), (x + cw, y + ch), (128), 2)
-            cv2.circle(th, (cX, cY), 10, (128), 2)
-            cv2.putText(th, label, textbox, cv2.FONT_HERSHEY_SIMPLEX, float(0.5*self.frame_scale), (200,200,200), int(1*self.frame_scale))
             if self.debug_process: 
+                cv2.rectangle(th, (left, top), (right, bottom), (200), 2)
+                cv2.circle(th, (cX, cY), 10, (128), 2)
                 cv2.imshow("Centers", resize_frame(th)) 
                 
             rois.append((top, bottom, left, right))
@@ -253,16 +235,12 @@ class ROIAutoDetector:
 
         return sorted_with_index
 
-
     @staticmethod
     def __draw_rois_on_frame(frame, rois, frame_scale: float = 1.0):
         """Draw detected ROIs on frame with labels."""
         
         for idx, (top, bottom, left, right) in rois.items():
-            # top, bottom, left, right = roi
-            # Draw green rectangle
             cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
-            # Draw label
             cv2.putText(frame, f"ROI {idx}", (left, top - 5), cv2.FONT_HERSHEY_SIMPLEX, float(1*frame_scale), (0, 255, 0), int(2*frame_scale))
         
         return frame
@@ -364,7 +342,7 @@ if __name__ == "__main__":
     feed = VideoFeed("Recorded Video 2 (Camera 4K Webcam)", True, "Jasmijn_code/videos/test_mjpg_1.avi", loop=True)
     stream = feed.openFeed()
     
-    detector1 = ROIAutoDetector(expected_n_rois=51, DEBUG=True, DEBUGPROCESS=False)
+    detector1 = ROIAutoDetector(expected_n_rois=100, DEBUG=True, DEBUGPROCESS=True)
     results = {}
     
     try:
@@ -373,7 +351,7 @@ if __name__ == "__main__":
             
             if results == {}: 
                 print("In capture loop, waiting for user input...")
-                results = detector1.capture_loop(frame, max_attempts=5, automatic=True)
+                results = detector1.capture_loop(frame, max_attempts=5, automatic=False)
             elif results != {}:
                 print(f"{len(results)} ROI's detected, exiting capture loop.")
                 break
