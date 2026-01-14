@@ -6,9 +6,9 @@ import threading
 
 from feed import LiveFeed, VideoFeed
 from camera_scanner import CameraScanner
-from decoders import DataMatrixDecoder, BarcodeDecoder
+from decoders_zxingcpp import DataMatrixDecoder as DataMatrixDecoder
 from roi_auto_detector import ROIAutoDetector
-from profile_setup import standard_profile, wallet_profile, giftbox_profile, barcode_profile
+from profile_setup import standard_profile, wallet_profile, giftbox_profile
 
 # Initialize environment and logging before importing modules that use cv2/matplotlib
 from logging_config import set_up_loger
@@ -33,10 +33,6 @@ def threaded_key_profile_switcher(scanner: CameraScanner):
         elif keyboard.is_pressed("2"):
             scanner.running = True
             scanner.switch_profile(giftbox_profile)
-            time.sleep(0.25)
-        elif keyboard.is_pressed("3"):
-            scanner.running = True
-            scanner.switch_profile(barcode_profile)
             time.sleep(0.25)
         elif keyboard.is_pressed("0"):
             scanner.running = True
@@ -94,9 +90,7 @@ def main():
     # ---------------------------
     # Start scanner
     # ---------------------------
-    # Verhoogd naar 8 threads voor 50 ROI's parallelle verwerking
-    matrix_decoder = DataMatrixDecoder(num_threads=16, max_queue_size=100)
-    barcode_decoder = BarcodeDecoder(num_threads=8, max_queue_size=100)    
+    matrix_decoder = DataMatrixDecoder(use_threads=True, num_threads=16)
     roi_detector = ROIAutoDetector(expected_n_rois=50, DEBUG=True, DEBUGPROCESS=False) # Verander DEBUGPROCESS naar True als je de process stappen wilt zien. 
 
     # Realtime = False
@@ -118,7 +112,7 @@ def main():
             # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output3.avi", loop=True),
             VideoFeed("1Recorded Video (Camera Kiyo)", True, "Jasmijn_code/videos/wallet_test_mjpg_1.avi", loop=True),
     
-            # scannen van 50 giftboxes of 1 barcode per keer
+            # scannen van 50 giftboxes
             # LiveFeed("Camera 4K Webcam", False, giftbox_profile.camera_index),
             # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/testrecord_4kV4.avi", loop=True),
             VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/test_mjpg_1.avi", loop=True), # deze
@@ -129,13 +123,12 @@ def main():
             # LiveFeed("Camera Kiyo", True, 2), 
             VideoFeed("2Recorded Video (Camera Kiyo)", True, "Jasmijn_code/videos/wallet_test_mjpg_1.avi", loop=True),
     ]    
-    scanner = CameraScanner(matrix_decoder, barcode_decoder, roi_detector, feed_list, debug = True)
+    scanner = CameraScanner(matrix_decoder, roi_detector, feed_list, debug = True)
     
     print("="*50)
     print("   CONTROLS: ")
     print("   1 = Wallet profile")
     print("   2 = Giftbox profile")
-    print("   3 = Barcode profile")
     print("   ESC = Quit")
     print("="*50)
     
@@ -147,8 +140,6 @@ def main():
     )
     scan_thread.start()
     scanner.run()
-    # while scanner.isactive:
-    #     pass
     scan_thread.join()
             
 

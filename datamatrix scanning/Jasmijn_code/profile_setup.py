@@ -10,7 +10,7 @@ class ScanProfile:
         self.exposure = exposure
         self.brightness = brightness
         
-        self.scan_type = scan_type # "datamatrix" or "barcode"
+        self.scan_type = scan_type
         self.rois: dict = rois
         self.data_timeout = data_timeout
         self.total_timeout = total_timeout
@@ -65,20 +65,4 @@ giftbox_profile = ScanProfile(
     data_timeout=10.0,
     total_timeout = 15.0, 
     scan_type="datamatrix",
-)
-
-# Barcode profile
-width = 110
-height = 60
-middenlr, middentp = 2145-20, 1130+30
-top, left = middentp-height, middenlr-width
-bottom, right = middentp+height, middenlr+width
-
-barcode_profile = ScanProfile(
-    name="Barcode",
-    camera_index = webcam_4k,
-    data_timeout=10.0,
-    total_timeout=5.0,
-    scan_type="barcode",
-    rois={1: (top, bottom, left, right)}, 
 )

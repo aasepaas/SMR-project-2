@@ -28,6 +28,7 @@ class ROIAutoDetector:
     def __init__(self, expected_n_rois = 50, DEBUG: bool = False, DEBUGPROCESS: bool = False):
         self.debug = DEBUG
         self.debug_process = DEBUGPROCESS
+        self.debug_rois = False
         self.expected_n_rois = expected_n_rois  # Verwacht aantal ROI's
         self.threshold_value = None  # Standaard geen vaste tresh value    
         self.frame_scale = 2       
@@ -98,8 +99,9 @@ class ROIAutoDetector:
         # thresholding 
         if self.threshold_value is None:
             self.threshold_value = 185 
-            if self.debug_process: 
-                self.threshold_value = self.test_threshold_values(blur)  # Uncomment to use trackbar for threshold value selection      
+            if self.debug_rois: 
+                self.threshold_value = self.test_threshold_values(blur)  # Uncomment to use trackbar for threshold value selection
+                self.debug_rois = False      
         _, th = cv2.threshold(blur, self.threshold_value, 255, cv2.THRESH_BINARY)        
         if self.debug_process: 
             cv2.imshow(f"Threshold blur {self.threshold_value}", resize_frame(th))
@@ -322,7 +324,7 @@ class ROIAutoDetector:
             counter = 0
             while counter <= max_attempts: 
                 if counter == max_attempts:
-                    self.debug_process = True
+                    self.debug_rois = True
                     self.threshold_value = None  # Reset tresh value to allow manual selection
                     logger.critical("Final attempt reached, enabling debug process view.")
                     logger.critical("Automatic retrying disabled. Please select threshold value manually.")

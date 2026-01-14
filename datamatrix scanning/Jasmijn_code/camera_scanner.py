@@ -10,8 +10,8 @@ from cv2.typing import MatLike
 # Private imports
 from feed import resize_frame
 from roi_auto_detector import ROIAutoDetector
-from decoders import DataMatrixDecoder, BarcodeDecoder
-from profile_setup import standard_profile, wallet_profile, giftbox_profile, barcode_profile, ScanProfile
+from decoders_zxingcpp import DataMatrixDecoder as DataMatrixDecoder
+from profile_setup import standard_profile, wallet_profile, giftbox_profile, ScanProfile
 
 # Debugging
 from logging_config import set_up_loger
@@ -31,25 +31,20 @@ class CameraScanner:
     # =================================================================
     def __init__(self, 
                  dm_decoder: DataMatrixDecoder,
-                 barcode_decoder: BarcodeDecoder, 
                  detector: ROIAutoDetector, 
                  feed_list: list,
                  profile: ScanProfile = standard_profile, 
-                 debug: bool = False,
-                 roi_timeout: float = 5.0) -> None: 
+                 debug: bool = False) -> None: 
         
         # =============================================================
         # Setting up received parameters
         # =============================================================
         self.dm_decoder = dm_decoder
-        self.barcode_decoder = barcode_decoder
         self.detector = detector
         self.feed_list = feed_list
         self.profile: ScanProfile = profile
         self.rois: dict[int, tuple[int, int, int, int]] = profile.rois
         self.DEBUG_show_images: bool = debug
-        self.threshold_value: int | None = None
-        self.adaptive_threshold_values: tuple[int, int] | None = None
         # =============================================================
         # Setting up starting booleans and values
         # =============================================================
@@ -60,38 +55,18 @@ class CameraScanner:
         # setting up boolean flags and storage variables
         self.running: bool = True
         self.detected_all: bool = False
+        self.codes_retrieved: bool = False # Has the last full set of codes been retrieved by caller?
         
-        # Track when ROI was last changed
-        self.roi_transition_time: float = time.time()
-        # How many seconds to wait on a ROI without a successful datamatrix decode
-        self.roi_timeout: float = float(roi_timeout)
-        # Use a dict mapping index -> image to avoid index-assignment errors
+        self.roi_transition_time: float = time.perf_counter() # Track when ROI was last changed
         self.ROIs_send_to_decoder: dict[int, object] = {}
-           
-        # Persistent results across scanning rounds
         self.persistent_results: dict[int, str] = {}  # Results that stay saved (only reset on profile switch)
-        # Store last detected timestamp
-        self.last_code_time: float = 0
-        # Has the last full set of codes been retrieved by caller?
-        self.codes_retrieved: bool = False
-                
-        # Start decoders immediately so they run continuously throughout all frames
-        self.dm_decoder.start()
-        self.barcode_decoder.start()
+        self.last_code_time: float = 0 # Store last detected timestamp
+        
+        self.threshold_value: int | None = None
+        self.adaptive_threshold_values: tuple[int, int] | None = None
         
     def __del__(self) -> None:
         print("Stop Scanner file")
-        # Flush any remaining work and stop decoder workers
-        try:
-            if self.dm_decoder:
-                self.dm_decoder.flush()
-                self.dm_decoder.stop()
-            if self.barcode_decoder:
-                self.barcode_decoder.flush()
-                self.barcode_decoder.stop()
-        except Exception as e:
-            logger.error(f"Error stopping decoders: {e}")
-            
         # Close camera and all windows
         cv2.destroyAllWindows()
         
@@ -100,14 +75,7 @@ class CameraScanner:
             f.isactive = (i == idx)
 
     def __retrieve_rois(self, frame) -> dict[int, tuple[int,int,int,int]]:
-        try:
-            # if self.profile.name != standard_profile.name:
-            #     # Temporarily use standard_profile for consistent ROI detection
-            #     self.feed_list[self.profile.camera_index].configure_camera(profile=standard_profile, set_resolution=False)
-            #     self.profile = standard_profile
-            #     time.sleep(0.5)  # small delay for camera to stabilise
-            #     return {}
-            
+        try:            
             if self.DEBUG_show_images:
                 rois = self.detector.capture_loop(frame, max_attempts=2, automatic=True)
             else:
@@ -115,11 +83,7 @@ class CameraScanner:
             if not rois:
                 return {}  # Return dummy ROI on failure
             
-            # print(f"{len(rois)} ROI's detected, exiting capture loop.")
-            cv2.destroyAllWindows()
-            # Restore the target profile settings
-            self.feed_list[self.profile.camera_index].configure_camera(profile=self.profile, set_resolution=False)
-            
+            cv2.destroyAllWindows()            
             logger.debug(f"Assigned {len(rois)} ROIs from auto-detection for profile {self.profile.name}")
             return rois
 
@@ -161,7 +125,7 @@ class CameraScanner:
         canvas = np.zeros((rows * target_h, cols * target_w, 3), dtype=np.uint8)
         
         # Fill grid
-        for i, key in enumerate(ordered_keys):
+        for i, rois_key in enumerate(ordered_keys):
             if i >= (cols * rows):
                 break
             
@@ -173,7 +137,7 @@ class CameraScanner:
             
             # Get or extract image
             if rois_input is not None:
-                img = rois_input.get(key)
+                img = rois_input.get(rois_key)
                 if img is None or img.size == 0:
                     continue
                 img_bgr = self._convert_to_bgr(img)
@@ -182,7 +146,9 @@ class CameraScanner:
                 except Exception:
                     continue
             elif frame is not None:
-                roi = self.rois[key]
+                roi = self.rois.get(rois_key)
+                if roi is None:
+                    continue
                 top, bottom, left, right = self.__roi_box_size(frame.shape[0], frame.shape[1], roi)
                 roi_box = frame[top:bottom, left:right]
                 gray_roi = cv2.cvtColor(roi_box.astype("uint8"), cv2.COLOR_BGR2GRAY)
@@ -195,7 +161,7 @@ class CameraScanner:
             canvas[y_start:y_end, x_start:x_end] = img_bgr
             
             # Draw border (green if decoded, red otherwise)
-            color = (0, 255, 0) if (key in self.persistent_results and self.persistent_results[key]) else (0, 0, 255)
+            color = (0, 255, 0) if (rois_key in self.persistent_results and self.persistent_results[rois_key]) else (0, 0, 255)
             cv2.rectangle(canvas, (x_start+1, y_start+1), (x_end-1, y_end-1), color, 2)
         
         cv2.imshow(window_name, canvas)
@@ -234,12 +200,7 @@ class CameraScanner:
 
     def __process_frame(self, frame):
         """Extract and convert current ROI to grayscale."""
-        DEBUG_barcode = False
         DEBUG_wallet = False
-        if DEBUG_barcode:
-            barcode_profile_windows = ["Barcode threshold", "Barcode adaptive threshold"]
-            if self.profile.name != barcode_profile.name:
-                self.__destroy_profile_windows(barcode_profile_windows)
         if DEBUG_wallet:       
             wallet_profile_windows = ["Selected low-contrast threshold"]
             if self.profile.name != wallet_profile.name:
@@ -258,30 +219,7 @@ class CameraScanner:
 
             if self.profile.name == giftbox_profile.name:
                 pass
-            
-            elif self.profile.name == barcode_profile.name:
-                # contrast verbeteren (verscherpen)
-                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-                norm  = clahe.apply(norm)
-                
-                #! Change bool to show thresholded images for debugging
-                if DEBUG_barcode:
-                    if self.threshold_value is None:
-                        self.threshold_value = 128
-                        self.threshold_value = self.test_threshold_values(norm) 
-
-                    tresh = cv2.threshold(norm, self.threshold_value, 255, cv2.THRESH_BINARY)[1]
-                    if self.DEBUG_show_images:
-                        cv2.imshow(barcode_profile_windows[0], tresh)
-                    
-                    if self.adaptive_threshold_values is None:
-                        self.adaptive_threshold_values = (11, 3)  # (blockSize, C)
-                        self.adaptive_threshold_value = self.test_adaptive_threshold_values(norm) 
-                    blocksize, c = self.adaptive_threshold_values
-                    adaptive_tresh = cv2.adaptiveThreshold(norm, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, blocksize, c)
-                    if self.DEBUG_show_images:
-                        cv2.imshow(barcode_profile_windows[1], adaptive_tresh)
-                                
+                                            
             elif self.profile.scan_type == wallet_profile.scan_type:
                 #! Change bool to test low-contrast wallet thresholds and adaptive thresholds 
                 if DEBUG_wallet: 
@@ -289,25 +227,9 @@ class CameraScanner:
                     if self.DEBUG_show_images:
                         cv2.imshow("Selected low-contrast threshold", test)
                 
-            
             # store per-index image in dict
             self.ROIs_send_to_decoder[index] = norm
-            # if self.DEBUG_show_images:
-                # cv2.imshow(f"Last ROI send to decoder {index}", norm)
-                # cv2.waitKey(1)
-            while True:
-                if self.profile.scan_type == barcode_profile.scan_type:
-                    if self.barcode_decoder.input_queue.full():
-                        continue
-                    else:
-                        self.barcode_decoder.input_queue.put({"index": index, "frame": norm})
-                else:
-                    if self.dm_decoder.input_queue.full():
-                        continue
-                    else:
-                        self.dm_decoder.input_queue.put({"index": index, "frame": norm})
-                break
-    
+
     @staticmethod        
     def normalize_image(img):
         # Normalize using numpy to avoid OpenCV binding/type-check overload issues
@@ -322,8 +244,6 @@ class CameraScanner:
         return np.round(norm).astype(np.uint8)
             
     def run(self) -> None:
-        print("ESC = quit | f/g = Focus | e/r = Exposure | b/n = Brightness \n")
-
         logger.info("CameraScanner.run started")
         self.running = True
         # =============================================================
@@ -331,7 +251,7 @@ class CameraScanner:
         # =============================================================
         stream_iterator = None
         current_camera_index = self.profile.camera_index
-        self.switch_time = time.time()
+        self.switch_time = time.perf_counter()
         self.timeout_reached = False
         
         while self.running:
@@ -365,21 +285,18 @@ class CameraScanner:
             # If no ROIs assigned yet, try to retrieve them
             # =============================================================
             if not self.rois and self.profile == giftbox_profile:
-                # Always grap a new frame.
+                # Always grab a new frame to send to auto roi detection.
                 stream_iterator = iter(self.streams[self.profile.camera_index])
                 frame = next(stream_iterator)
                 if frame is None:
                     continue
                 rois = self.__retrieve_rois(frame)
                 if rois:
-                    print(f"Type = {type(rois)}, Length = {len(rois)}")
                     self.rois = rois
-                    self.switch_time = time.time()
+                    self.switch_time = time.perf_counter()
                 else:
                     continue
-                
-            self.__handle_key()
-                                
+                                                
             if self.timeout_reached or self.detected_all: 
                 time.sleep(0.1) #? Reduce CPU usage when timed out or all decoded 
                 self.__expire_code_if_needed() # Expire stored code if not collected
@@ -389,21 +306,18 @@ class CameraScanner:
                 self.detected_all = True
                 self.codes_retrieved = False
                 logger.debug("All ROIs have been successfully decoded.")
-                logger.debug(f"Completed in {time.time() - self.switch_time:.4f} seconds.")
+                logger.warning(f"Completed in {(time.perf_counter() - self.switch_time)*1000:.4f} milliseconds. \n(time between profile switch and decoded all ROI's)")
                 continue
             
-            if time.time() - self.switch_time > self.profile.total_timeout:    
+            if time.perf_counter() - self.switch_time > self.profile.total_timeout:    
                 logger.critical(f"Total scan timeout of {self.profile.total_timeout} seconds reached.")
                 logger.debug("Please retreive codes or switch profile.")
                 self.timeout_reached = True
-                self.detected_all = True
+                if self.codes_retrieved:
+                    self.detected_all = True
                 self.codes_retrieved = False
             else:
                 self.timeout_reached = False
-
-
-            total_rois = len(self.rois)
-            processing_rois = total_rois - len(self.persistent_results)
 
             # Display frames - Before we have results (to show ROI's)
             if self.DEBUG_show_images:
@@ -413,37 +327,28 @@ class CameraScanner:
                       
             # Wrap the processing in a broad exception catcher so unexpected errors get logged instead of silently terminating the thread.
             try:
-                # Start decoders
-                if not self.dm_decoder.active:
-                    self.dm_decoder.start()
-                if not self.barcode_decoder.active:
-                    self.barcode_decoder.start()
-                                                                
-                t2 = time.perf_counter()
                 self.__process_frame(frame) 
+                start_time = time.perf_counter()
+                self.dm_decoder.decode_datamatrices(self.ROIs_send_to_decoder) # Send all crops at once
+                end_time = time.perf_counter()
+                logger.debug(f"Datamatix processing time: {(end_time - start_time)*1000:.3f} milliseconds")
 
-                # Decode
-                decoded = self.__decode_roi()
-                # If decoder returned no results or only empty strings (e.g. {0: ''}), treat as no decode and continue to next frame.
+                decoded = self.dm_decoder.get_results()
+                # If decoder returned no results or only empty strings (e.g. {1: ''}), treat as no decode and continue to next frame.
                 if (not decoded) or (isinstance(decoded, dict) and all(not v for v in decoded.values())):
                     pass
                 else:
-                    self.last_code_time = time.time()
-                    t3 = time.perf_counter()
-                    logger.info(f"Frame decode time: {(t3 - t2):.4f} s")         
-                    self.flush_decoder_queues()
+                    self.last_code_time = time.perf_counter()        
                     
                     # Keep decoded as a dict ordered by ROI index (ascending)
-                    decoded = dict(sorted(decoded.items()))  # dict(int: str)
+                    decoded = dict(sorted(decoded.items()))
                     
                     # Save successful decodes to persistent results
                     self.persistent_results |= {roi_idx: value for roi_idx, value in decoded.items() if value}
-                    print(f"Decoded this round: {decoded}")  
+                    logger.info(f"This round decoded results: {decoded}")  
                                     
             except Exception as e:
                 logger.error(f"Exception in camera scanner main loop: {e}")
-                self.dm_decoder.stop()
-                self.barcode_decoder.stop()
                 break
                                       
             # Display frames - When we have results
@@ -485,45 +390,16 @@ class CameraScanner:
             cv2.imshow("Camera", resize_frame(frame))
             cv2.waitKey(1)  # in milliseconds
           
-    def __handle_key(self) -> None:
-        """Process keyboard input from the capture loop."""          
-        key = cv2.waitKey(1) & 0xFF
-        if   key == ord('f'): 
-            self.configure_feed_camera_properties(self.profile, 'focus', cv2.CAP_PROP_FOCUS, -1)
-        elif key == ord('g'): 
-            self.configure_feed_camera_properties(self.profile, 'focus', cv2.CAP_PROP_FOCUS, +1)
-        elif key == ord('e'): 
-            self.configure_feed_camera_properties(self.profile, 'exposure', cv2.CAP_PROP_EXPOSURE, -1)
-        elif key == ord('r'):
-            self.configure_feed_camera_properties(self.profile, 'exposure', cv2.CAP_PROP_EXPOSURE, +1)
-        elif key == ord('b'): 
-            self.configure_feed_camera_properties(self.profile, 'brightness', cv2.CAP_PROP_BRIGHTNESS, -1)
-        elif key == ord('n'): 
-            self.configure_feed_camera_properties(self.profile, 'brightness', cv2.CAP_PROP_BRIGHTNESS, +1)
-
-
-    def configure_feed_camera_properties(self, profile: 'ScanProfile', attr_name: str, cap_prop: int, delta: float) -> None:
-        """Check which feed is currently active and set current_feed accordingly."""
-        try: 
-            self.feed_list[self.profile.camera_index].adjust_camera_settings(profile, attr_name, cap_prop, delta)
-        except Exception as e:
-            logger.error(f"Failed to adjust camera property {attr_name}: {e}")
-
     # =====================================================================
     #  Change profile (and camera if needed)
     # =====================================================================
-    def flush_decoder_queues(self) -> None:
-        """Flush both decoder queues."""
-        self.dm_decoder.flush()
-        self.barcode_decoder.flush()
-
     def switch_profile(self, new_profile: ScanProfile) -> None:
         """Look up a profile by name and switch to it."""
         # Add a check whether the profile is different from the current one
         if self.profile.name == new_profile.name:
             print(f"Already using profile {new_profile.name}, no switch needed.")
             return
-
+        
         logger.info(f"Profile switched from {self.profile.name} to {new_profile.name}, resetting persistent results")
         self.persistent_results.clear()        
         
@@ -537,14 +413,9 @@ class CameraScanner:
         self.feed_list[self.profile.camera_index].configure_camera(profile=new_profile, set_resolution=False)
         self.__log_profile_settings(self.profile)
         
-        # Flush decoder queues after camera hardware switch
-        self.flush_decoder_queues()
-        self.dm_decoder.stop()
-        self.barcode_decoder.stop()
-        
         # Ensure rois uses the same concrete mapping type as during initialization
         self.rois: dict[int, tuple[int, int, int, int]] = self.profile.rois
-        self.switch_time = time.time()
+        self.switch_time = time.perf_counter()
         self.timeout_reached = False
         self.detected_all = False
         self.codes_retrieved = False
@@ -759,24 +630,11 @@ class CameraScanner:
     # ==============================================================
     # Decoders (per profile) and update code
     # ==============================================================
-    def __decode_roi(self):
-        # --- DataMatrix profiles ---
-        if self.profile.scan_type == "datamatrix":
-            # Wait for all ROI decodes to complete
-            return self.dm_decoder.get_results()
-        
-        # --- Barcode profiles ---
-        elif self.profile.scan_type == "barcode":
-            return self.barcode_decoder.get_results()
-        
-        else:
-            return {}
-
     #! Controleren of deze weer werkt
     def __expire_code_if_needed(self) -> None:
         """ Clear `persistent_results` when it has exceeded `profile.data_timeout`. """
         if self.persistent_results:
-            elapsed = time.time() - self.last_code_time
+            elapsed = time.perf_counter() - self.last_code_time
             if elapsed > (self.profile.data_timeout):
                 logger.info(f"Code expired after {elapsed} seconds:")
                 logger.debug("Expired the codes:") # {self.persistent_results}")              
@@ -784,17 +642,7 @@ class CameraScanner:
                 for i in range(1, len(self.rois) + 1):
                     print(f"ROI {i:>2}: {self.persistent_results.get(i, '<no code>')}")
                 self.persistent_results = {}
-    # ==============================================================
-    # Others
-    # ==============================================================
-    # Bastiaan waarom heb ik deze methode?
-    def update_state(self, state: str) -> str:
-        if (self.state != state):
-            logger.info(f"State changed to: {state}")
-            self.previous_state = self.state
-            self.state = state
-        return self.state
-    
+
     # Gebruik deze methode voor het ophalen van de laatste code   
     def get_code(self) -> dict[int, str] | None:
         if self.detected_all and not self.codes_retrieved:
@@ -809,3 +657,4 @@ class CameraScanner:
     def exit_loop(self) -> None:
         self.running = False
         
+                                                                                                                   
