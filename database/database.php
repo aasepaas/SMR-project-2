@@ -75,16 +75,19 @@ class DatabaseConfig
     }
 
     public function checkID($boxid, $id)
-    {
-        $dbid = $this->determineMatchingId($boxid);
-        if ($dbid == null) {
-            return false;
-        } elseif ($dbid == $id) {
-            return true;
-        } else {
-            return false;
-        }
-
+ {
+     $dbid = $this->determineMatchingId($boxid);
+     if ($dbid != $id) {
+         $sqlq = $this->conn->prepare("UPDATE 'premium-wallet' SET 'Succesful_Match' = 'False' WHERE 'BoxID' = ? ");
+         $sqlq->bind_param("s", $boxid);
+         $sqlq->execute();
+         return false;
+     } else {
+         $sqlq = $this->conn->prepare("UPDATE `premium-wallet` SET `Succesful_Match` = 'True' WHERE `BoxID` = ? ");
+         $sqlq->bind_param("s", $boxid);
+         $sqlq->execute();
+         return true;
+     }
 
 
     }
@@ -94,5 +97,6 @@ class DatabaseConfig
     }
 
 }
+
 
 ?>
