@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import cv2
 
-from profile_setup import ScanProfile, standard_profile, wallet_profile, giftbox_profile, barcode_profile
+from profile_setup import ScanProfile, standard_profile
 
 # Debugging
 from logging_config import set_up_loger
@@ -86,7 +86,7 @@ class VideoFeed(Feed):
                 print("\nEnd of video...\n")
                 break
             
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 1) # Restart video at 1 to ensure proper reading
             continue
             
    

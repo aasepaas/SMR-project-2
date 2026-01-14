@@ -111,20 +111,23 @@ def main():
     #         VideoFeed("Recorded Video 1 (Camera Original)", True, "Jasmijn_code/videos/record_of_wallets_Kiyo_30secV6.avi", loop=True),
     #         VideoFeed("Recorded Video 2 (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output3.avi", loop=True),
     #         VideoFeed("Recorded Video 3 (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output4.avi", loop=True),
-    #     ]2
+    #     ]
     
     feed_list = [
-            # scannen van 1 wallet per keer
-            VideoFeed("Recorded Video (Camera Original)", True, "Jasmijn_code/videos/record_of_wallets_Kiyo_30secV6.avi", loop=True),
-            
+            # dummy video om code te laten werken met wisselen profiel
+            # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output3.avi", loop=True),
+            VideoFeed("1Recorded Video (Camera Kiyo)", True, "Jasmijn_code/videos/wallet_test_mjpg_1.avi", loop=True),
+    
             # scannen van 50 giftboxes of 1 barcode per keer
             # LiveFeed("Camera 4K Webcam", False, giftbox_profile.camera_index),
             # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/testrecord_4kV4.avi", loop=True),
-            VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/test_mjpg_1.avi", loop=True),
+            VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/test_mjpg_1.avi", loop=True), # deze
             # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/test_raw.avi", loop=True),
             
-            # dummy video om code te laten werken met wisselen profiel
-            VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output3.avi", loop=True),
+            # scannen van 1 wallet per keer
+            # VideoFeed("Recorded Video (Camera Original)", True, "Jasmijn_code/videos/record_of_wallets_Kiyo_30secV6.avi", loop=True),
+            # LiveFeed("Camera Kiyo", True, 2), 
+            VideoFeed("2Recorded Video (Camera Kiyo)", True, "Jasmijn_code/videos/wallet_test_mjpg_1.avi", loop=True),
     ]    
     scanner = CameraScanner(matrix_decoder, barcode_decoder, roi_detector, feed_list, debug = True)
     

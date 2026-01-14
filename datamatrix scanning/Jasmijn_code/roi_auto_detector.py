@@ -161,8 +161,9 @@ class ROIAutoDetector:
             cX, cY = centers_list[idx]
             
             # Padding als percentage van contour dimensies
-            pad_w = int(cw * 0.10)
-            pad_h = int(ch * 0.10)
+            padding = 0.10
+            pad_w = int(cw * padding)
+            pad_h = int(ch * padding)
             
             top = y - pad_h
             bottom = y + ch + pad_h
