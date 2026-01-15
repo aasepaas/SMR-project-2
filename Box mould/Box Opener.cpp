@@ -15,7 +15,7 @@ const int SERVO_PIN = 27;
 const int End1 = 19;
 const int End2 = 21;
 
-const int microstep = 32;
+const int microstep = 16;
 const int gearRatio = 6;
 
 float speed1 = 0.15 * 200 * microstep * gearRatio;
@@ -27,7 +27,7 @@ AccelStepper stepper2(AccelStepper::DRIVER, STEP2_PIN, DIR2_PIN);
 AccelStepper stepper3(AccelStepper::DRIVER, STEP3_PIN, DIR3_PIN);
 Servo myServo;
 
-bool Homed1 = false; 
+bool Homed1 = true; 
 bool Homed2 = true;
 bool Homing = false;
 
@@ -93,7 +93,7 @@ void setup() {
   attachInterrupt(End1, Endstop1, FALLING);
   attachInterrupt(End2, Endstop2, FALLING);
   
-  stepper1.setMaxSpeed(speed1*100);
+  stepper1.setMaxSpeed(speed1*15);
   stepper1.setAcceleration(accel1*10);
   stepper2.setMaxSpeed(speed2*0.75 );
   stepper2.setAcceleration(speed2*3);
@@ -132,10 +132,10 @@ void loop() {
         stepper1.moveTo(0);
       }
       else if (Stepper_On >= 1020 && Stepper_On < 1700) { //1360 = 1.1V 
-        stepper1.moveTo(4500);
+        stepper1.moveTo(5000);
       }
       else if (Stepper_On >= 1700 && Stepper_On < 2380) { //2040 = 1.65V
-        stepper2.moveTo(0);
+        stepper2.moveTo(0); 
       }
       else if (Stepper_On >= 2380 && Stepper_On < 3060) { //2720 = 2.2V
         stepper2.moveTo(0);
