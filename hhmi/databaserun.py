@@ -66,7 +66,7 @@ class DatabaseRun:
                 json_arg = json.dumps(payload)
 
                 process = subprocess.Popen(
-                            [r"C:\xampp\php\php.exe", r"C:\J2S4\vakken\C_coderen\PythonApplication3\check2.php", "final_check", json_arg],
+                            [r"C:\xampp\php\php.exe", r"C:\J2S4\vakken\C_coderen\secridCodeTest\check2.php", "final_check", json_arg],
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             text=True
@@ -81,7 +81,7 @@ class DatabaseRun:
                         }
                 json_arg = json.dumps(payload)
                 process = subprocess.Popen(
-                            [r"C:\xampp\php\php.exe", r"C:\J2S4\vakken\C_coderen\PythonApplication3\check2.php","check_boxid", json_arg],
+                            [r"C:\xampp\php\php.exe", r"C:\J2S4\vakken\C_coderen\secridCodeTest\check2.php","check_boxid", json_arg],
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             text=True
