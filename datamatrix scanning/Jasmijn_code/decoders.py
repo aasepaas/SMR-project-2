@@ -8,10 +8,10 @@ import time
 import random
 
 # Debugging
-from logging_config import set_up_loger
+from logging_config import set_up_logger
 import logging
 logger = logging.getLogger()
-set_up_loger()
+set_up_logger()
 
 class DecoderBase(ABC):
     """Abstract base class containing shared decoder logic.

@@ -1,111 +1,125 @@
 import cv2
-
+# =============================================================================
+# Configuable parameters
+# =============================================================================
+# Configure which camera indexes to test
 # camera_indexen = [0, 1, 2, 3]
-camera_indexen = [2]
-value = "normal"  # "normal", "dshow", "msmf", "CAP_V4L2", "CAP_VFW"
+camera_indexen = [0]
+# Keep at "" to use default backend (also used in camerascanner.py)
+value = "" # dshow to test camera properties (pop up Window) or "msmf" for Media Foundation, or "" for default
+settings = {'focus': 186, 'brightness': None, 'exposure': None} # Set to None for auto
+
+test_capture_properties_bool = True
+test_region_of_interest_bool = True
+test_resizing_pixel_quality_bool = True # Test with test_region_of_interest_bool = True
+
+# =============================================================================
+# Main code
+# =============================================================================
+def set_start_camera_properties(cap, settings):
+    if settings.get('focus') is not None:
+        cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+        cap.set(cv2.CAP_PROP_FOCUS, settings['focus'])
+    else:
+        cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+
+    if settings.get('exposure') is not None:
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)
+        cap.set(cv2.CAP_PROP_EXPOSURE, settings['exposure'])
+    else:
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)
+    
+    if settings.get('brightness') is not None:
+        cap.set(cv2.CAP_PROP_BRIGHTNESS, settings['brightness'])
+    else:
+        cap.set(cv2.CAP_PROP_BRIGHTNESS, 100) # 'Default' brightness
+        
+property_steps = {
+    'focus':    {ord('f'): 1,  ord('F'): 5,  ord('g'): -1, ord('G'): -5},
+    'brightness': {ord('b'): 1, ord('B'): 5, ord('n'): -1, ord('N'): -5},
+    'exposure': {ord('e'): 1, ord('E'): 5, ord('r'): -1, ord('R'): -5}
+}
+
+properties_cv = {
+    'focus': cv2.CAP_PROP_FOCUS,
+    'brightness': cv2.CAP_PROP_BRIGHTNESS,
+    'exposure': cv2.CAP_PROP_EXPOSURE
+}
+
+def handle_key_adjust(key, name, value):
+    step = property_steps[name][key]
+    value += step
+    cap.set(properties_cv[name], value)
+    direction = "increased" if step > 0 else "decreased"
+    print(f"{name.capitalize()} {direction} to {value} (camera reports {cap.get(properties_cv[name])})")
+    return value
 
 for index in camera_indexen:
-#     cap = cv2.VideoCapture(index)  # probeer 0 en 1
-#     ret, frame = cap.read()
-#     print(f"{index = }: ")
-#     print(ret, frame.shape if ret else "No frame")
+    backends = {"dshow": cv2.CAP_DSHOW, "msmf": cv2.CAP_MSMF}
+    if value in backends:
+        cap = cv2.VideoCapture(index, backends[value])
+    else:
+        cap = cv2.VideoCapture(index)
 
-# 0 is Intern
-# 1 is Razer Kiyo
-# 2 is nvt
-# 3 is Intel Realsense
+    if test_capture_properties_bool:
+        cap.set(cv2.CAP_PROP_SETTINGS, 1)
 
-# 0 = kiyo, blauw links onder
-# 1 = intern
-# 2 = 4k Webcam
-# 3 = nvt
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 3840)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 2160)
 
-    match value:
-        case "normal":
-            print(f"{value} = normal?")
-            cap = cv2.VideoCapture(index) # 0 = intern, 1 = 4K Webcam
-        case "dshow":
-            print(f"{value} = dshow?")
-            cap = cv2.VideoCapture(index, cv2.CAP_DSHOW) # 0 = 4K Webcam, 1 = intern
-        case "msmf": 
-            print(f"{value} = msmf?")
-            cap = cv2.VideoCapture(index, cv2.CAP_MSMF) # 0 = intern, 1 = 4K Webcam
-        # case "CAP_V4L2": 
-        #     cap = cv2.VideoCapture(index, cv2.CAP_V4L2) # 0,1,2,3 = None
-        # case "CAP_GIGANETIX ":
-        #     cap = cv2.VideoCapture(index, cv2.CAP_GIGANETIX ) # 0,1,2,3 = None
-        case _: 
-            print(f"{value} = none?")
-            cap = cv2.VideoCapture(index) # 0 = intern, 1 = 4K Webcam
-    # cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-    try:
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 3840)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 2160)
-        # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-        # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        # cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
-        # cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)
-        # cap.set(cv2.CAP_PROP_BRIGHTNESS, 100)
-        # cap.set(cv2.CAP_PROP_SETTINGS, 1)  # Open camera settings window
-    except Exception as e:
-        print(f"Could not change frame heigt/width: {e}")
-    finally:
-        pass
-    DEBUG = True
-    BARCODE = False
-    CAPTURE_SETTING = True
+    set_start_camera_properties(cap, settings)
+    printed_info = False
+
     while True:
         ret, frame = cap.read()
-        cap.set(cv2.CAP_PROP_SETTINGS, 1)  # Open camera settings window
-        # if CAPTURE_SETTING:
-            # cap.set(cv2.CAP_PROP_SETTINGS, 1)  # Open camera settings window
-        
         if not ret:
             print("Geen frame!")
             break
-        
 
-        if DEBUG: 
+        if not printed_info:
             print(f"{index = }: {frame.shape}")
-            DEBUG = False
-        
-        # Testing Barcode Scanning ROI
-        if BARCODE: 
-            left, top = 850, 200
-            right, bottom = left + 75, top + 150
-            
+            printed_info = True
+
+        if test_region_of_interest_bool: 
+            width, height = 80, 80
+            middentp, middenlr = 685+20, 950-240
+            top, left = middentp-height, middenlr-height
+            bottom, right = middentp+width, middenlr+width
             frame = cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
             roi = frame[top:bottom, left:right]
-            roi = cv2.rotate(roi, cv2.ROTATE_90_CLOCKWISE)
-            
-            roi1 = cv2.resize(roi, None, fx=4, fy=4, interpolation=cv2.INTER_LINEAR)
-            cv2.imshow("ROI, linear", roi1)
-            roi2 = cv2.resize(roi, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
-            cv2.imshow("ROI, cubic", roi2)
-            roi3 = cv2.resize(roi, None, fx=4, fy=4, interpolation=cv2.INTER_AREA)
-            cv2.imshow("ROI, area", roi3)
-            roi4 = cv2.resize(roi, None, fx=4, fy=4, interpolation=cv2.INTER_NEAREST)
-            cv2.imshow("ROI, nearest", roi4)
+            # roi = cv2.rotate(roi, cv2.ROTATE_90_CLOCKWISE)
+
+            if test_resizing_pixel_quality_bool:
+                for interp, name in [(cv2.INTER_LINEAR,"linear"), (cv2.INTER_CUBIC,"cubic"),
+                                     (cv2.INTER_AREA,"area"), (cv2.INTER_NEAREST,"nearest")]:
+                    cv2.imshow(f"ROI {name}", cv2.resize(roi, None, fx=4, fy=4, interpolation=interp))
+
+        cv2.putText(frame, "Press ESC to exit", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(frame, f"Focus: {settings['focus']}, Brightness: {settings['brightness']}, Exposure: {settings['exposure']}",
+            org=(10, 70), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.7, color=(0, 255, 0), thickness=2)
         
-        # frame = cv2.resize(frame, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_LINEAR)
         cv2.imshow("Test", frame)
-        if cv2.waitKey(1) & 0xFF == 27:
-            if CAPTURE_SETTING: # showing values of the properties
-                print("CV_CAP_PROP_FRAME_WIDTH: '{}'".format(cap.get(cv2.CAP_PROP_FRAME_WIDTH)))
-                print("CV_CAP_PROP_FRAME_HEIGHT : '{}'".format(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-                print("CAP_PROP_FPS : '{}'".format(cap.get(cv2.CAP_PROP_FPS)))
-                print("CAP_PROP_POS_MSEC : '{}'".format(cap.get(cv2.CAP_PROP_POS_MSEC)))
-                print("CAP_PROP_FRAME_COUNT  : '{}'".format(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
-                print("CAP_PROP_BRIGHTNESS : '{}'".format(cap.get(cv2.CAP_PROP_BRIGHTNESS)))
-                print("CAP_PROP_CONTRAST : '{}'".format(cap.get(cv2.CAP_PROP_CONTRAST)))
-                print("CAP_PROP_SATURATION : '{}'".format(cap.get(cv2.CAP_PROP_SATURATION)))
-                print("CAP_PROP_HUE : '{}'".format(cap.get(cv2.CAP_PROP_HUE)))
-                print("CAP_PROP_GAIN  : '{}'".format(cap.get(cv2.CAP_PROP_GAIN)))
-                print("CAP_PROP_CONVERT_RGB : '{}'".format(cap.get(cv2.CAP_PROP_CONVERT_RGB)))
+        key = cv2.waitKey(1) & 0xFF
+
+        if key == 27: # ESC key to exit
             break
+
+        for name in property_steps: # Adjust camera properties based on key presses
+            if key in property_steps[name]:
+                settings[name] = handle_key_adjust(key, name, settings[name])
+
+    if test_capture_properties_bool:
+        print("CV_CAP_PROP_FRAME_WIDTH: '{}'".format(cap.get(cv2.CAP_PROP_FRAME_WIDTH)))
+        print("CV_CAP_PROP_FRAME_HEIGHT : '{}'".format(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        print("CAP_PROP_FPS : '{}'".format(cap.get(cv2.CAP_PROP_FPS)))
+        print("CAP_PROP_POS_MSEC : '{}'".format(cap.get(cv2.CAP_PROP_POS_MSEC)))
+        print("CAP_PROP_FRAME_COUNT  : '{}'".format(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+        print("CAP_PROP_BRIGHTNESS : '{}'".format(cap.get(cv2.CAP_PROP_BRIGHTNESS)))
+        print("CAP_PROP_CONTRAST : '{}'".format(cap.get(cv2.CAP_PROP_CONTRAST)))
+        print("CAP_PROP_SATURATION : '{}'".format(cap.get(cv2.CAP_PROP_SATURATION)))
+        print("CAP_PROP_HUE : '{}'".format(cap.get(cv2.CAP_PROP_HUE)))
+        print("CAP_PROP_GAIN  : '{}'".format(cap.get(cv2.CAP_PROP_GAIN)))
+        print("CAP_PROP_CONVERT_RGB : '{}'".format(cap.get(cv2.CAP_PROP_CONVERT_RGB)))
+
     cap.release()
     cv2.destroyAllWindows()

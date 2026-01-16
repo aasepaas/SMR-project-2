@@ -97,7 +97,7 @@ class CustomFormatter(logging.Formatter):
 
 
 # ---------- Logger setup ----------
-def set_up_loger():
+def set_up_logger():
     # Ensure environment and non-Python libs are configured first
     try:
         init_environment()
@@ -124,7 +124,7 @@ def set_up_loger():
 
 # --- Test voorbeeld ---
 if __name__ == "__main__":
-    set_up_loger()
+    set_up_logger()
     logger = logging.getLogger()
 
     logger.debug("Dit is een DEBUG message")

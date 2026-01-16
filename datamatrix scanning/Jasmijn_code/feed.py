@@ -4,10 +4,10 @@ import cv2
 from profile_setup import ScanProfile, standard_profile
 
 # Debugging
-from logging_config import set_up_loger
+from logging_config import set_up_logger
 import logging
 logger = logging.getLogger()
-set_up_loger()
+set_up_logger()
 
 """
 Verantwoordelijk voor het openen van de camera met de juiste index.
@@ -58,9 +58,10 @@ class PictureFeed(Feed):
 
 
 class VideoFeed(Feed):
-    def __init__(self, name, active, file_name, acceleration=1.0, loop: bool = False) -> None:
+    def __init__(self, name, active, file_name, camera_index = 0, acceleration=1.0, loop: bool = False) -> None:
         super().__init__(name, active)
         self.file_name = file_name
+        self.camera_index = camera_index
         self.acceleration = acceleration
         self.loop = bool(loop)
         

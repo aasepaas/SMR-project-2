@@ -16,27 +16,27 @@ class ScanProfile:
         self.total_timeout = total_timeout
 
 # Camera indices and focus settings for webcams
-webcam = 0
-webcam_4k = 1
-webcam_kiyo = 2
+webcam = 1
+webcam_4k = 2
+webcam_kiyo = 0
 
-webcam_kiyo_focus = 150
+webcam_kiyo_focus = 186
 
 # Standard profile
 standard_profile = ScanProfile(
-    name="Standard",
+    name="Standard (Laptop)",
     rois={},
-    camera_index = webcam_kiyo,
-    focus = webcam_kiyo_focus,
+    camera_index = webcam,
     data_timeout=0.5,
     total_timeout=0.5,
     scan_type="datamatrix",
 )
 
 # Wallet profile
-width = 55-20
-height = 45-20 
-middentp, middenlr = 355-10+5, 950-10-10
+width = 55-20+200
+height = 45-20+200
+# middentp, middenlr = 355-10+5, 950-10-10
+middentp, middenlr = 685+20, 950-240
 top, left = middentp-height, middenlr-width
 bottom, right = middentp+height, middenlr+width
 roi_dict = {}
@@ -45,7 +45,7 @@ for idx in range(50):
     roi_dict[idx+1] = (top, bottom, left, right)
     
 wallet_profile = ScanProfile(
-    name="Wallet",
+    name="Wallet (Kiyo)",
     camera_index = webcam_kiyo,
     focus=webcam_kiyo_focus,
     # exposure=-5,
@@ -59,7 +59,7 @@ wallet_profile = ScanProfile(
 
 # Giftbox profile 
 giftbox_profile = ScanProfile(
-    name="GiftBox",
+    name="GiftBox (4K Webcam)",
     camera_index=webcam_4k,
     rois={},
     data_timeout=10.0,

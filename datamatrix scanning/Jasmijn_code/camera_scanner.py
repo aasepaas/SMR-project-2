@@ -14,10 +14,10 @@ from decoders_zxingcpp import DataMatrixDecoder as DataMatrixDecoder
 from profile_setup import standard_profile, wallet_profile, giftbox_profile, ScanProfile
 
 # Debugging
-from logging_config import set_up_loger
+from logging_config import set_up_logger
 import logging
 logger = logging.getLogger()
-set_up_loger()
+set_up_logger()
 
 def nothing(x):
     pass

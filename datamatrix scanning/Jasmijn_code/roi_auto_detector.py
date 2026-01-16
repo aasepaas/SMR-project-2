@@ -5,10 +5,10 @@ from DBSCANFiltering import DBSCANFiltering
 from feed import resize_frame
 
 # Debugging
-from logging_config import set_up_loger
+from logging_config import set_up_logger
 import logging
 logger = logging.getLogger()
-set_up_loger()
+set_up_logger()
 
 def nothing(x):
     pass
