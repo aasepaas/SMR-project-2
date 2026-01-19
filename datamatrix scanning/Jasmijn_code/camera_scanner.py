@@ -81,11 +81,8 @@ class CameraScanner:
         Returns:
             A dictionary mapping ROI index to ROI box (top, bottom, left, right).
         """
-        try:            
-            if self.DEBUG_show_images:
-                rois = self.detector.capture_loop(frame, max_attempts=2, automatic=True)
-            else:
-                rois = self.detector.run(frame)    
+        try:
+            rois = self.detector.capture_loop(frame, automatic=True)
             if not rois:
                 return {}  # Return dummy ROI on failure
             
@@ -454,10 +451,10 @@ class CameraScanner:
             elapsed = time.perf_counter() - self.code_detected_time
             if elapsed > (self.profile.data_timeout):
                 logger.info(f"Code expired after {elapsed} seconds:")
-                logger.debug("Expired the codes:") # {self.persistent_results}")              
                 self.persistent_results = dict(sorted(self.persistent_results.items()))
-                for i in range(1, len(self.rois) + 1):
-                    print(f"ROI {i:>2}: {self.persistent_results.get(i, '<no code>')}")
+                logger.debug(f"Expired the codes: {self.persistent_results}")              
+                # for i in range(1, len(self.rois) + 1):
+                #     print(f"ROI {i:>2}: {self.persistent_results.get(i, '<no code>')}")
                 self.persistent_results = {}
 
     # Gebruik deze methode voor het ophalen van de laatste code   

@@ -114,7 +114,11 @@ def main():
     
     # Set up decoder and ROI detector
     matrix_decoder = DataMatrixDecoder(use_threads=True, num_threads=16)
-    roi_detector = ROIAutoDetector(expected_n_rois=50, DEBUG=True, DEBUGPROCESS=True) # Verander DEBUGPROCESS naar True als je de process stappen wilt zien. 
+    roi_detector = ROIAutoDetector(
+        expected_n_rois=50,
+        threadhold_value=121-10,
+        scaling_factor=2,
+    )
 
     # Set up CameraScanner
     scanner = CameraScanner(matrix_decoder, roi_detector, feed_list, debug = True)
