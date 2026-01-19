@@ -84,7 +84,7 @@ class DatabaseConfig
     {
         $dbid = $this->determineMatchingId($boxid);
         if ($dbid != $id) {
-            $sqlq = $this->conn->prepare("UPDATE 'premium-wallet' SET 'Succesful_Match' = 'False' WHERE 'BoxID' = ? ");
+            $sqlq = $this->conn->prepare("UPDATE `premium-wallet` SET `Succesful_Match` = 'False' WHERE `BoxID` = ? ");
             $sqlq->bind_param("s", $boxid);
             $sqlq->execute();
             return false;

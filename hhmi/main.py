@@ -26,14 +26,18 @@ from feed import LiveFeed, VideoFeed
 from camera_scanner import CameraScanner
 from decoders import DataMatrixDecoder, BarcodeDecoder
 from roi_auto_detector import ROIAutoDetector
-from profile_setup import wallet_profile, giftbox_profile, barcode_profile
+#from profile_setup import wallet_profile, giftbox_profile, barcode_profile
 
 # Initialize environment and logging before importing modules that use cv2/matplotlib
-from logging_config import init_environment, set_up_loger
+from logging_config import init_environment, set_up_logger
 init_environment()
-set_up_loger()
+set_up_logger()
+from decoders_zxingcpp import DataMatrixDecoder as DataMatrixDecoder
+
 
 from worker import Worker
+from profile_setup import standard_profile, wallet_profile, giftbox_profile
+
 
 
 
@@ -42,25 +46,67 @@ def main():
     csvReader = CSVHandler()
     status = StatusControl()
     # Verhoogd naar 8 threads voor 50 ROI's parallelle verwerking
-    matrix_decoder = DataMatrixDecoder(num_threads=8, max_queue_size=100)
-    barcode_decoder = BarcodeDecoder(num_threads=8, max_queue_size=100)    
-    roi_detector = ROIAutoDetector(DEBUG=True, DEBUGPROCESS=True)
+    #matrix_decoder = DataMatrixDecoder(use_threads=True, num_threads=16)
+    #barcode_decoder = BarcodeDecoder(num_threads=8, max_queue_size=100)    
+    #roi_detector = ROIAutoDetector(expected_n_rois=50, DEBUG=True, DEBUGPROCESS=False)
 
-    Realtime = True
-    if Realtime: #-=x Use two live cameras # Original, 4K Webcam
-        feed_list = [
-            LiveFeed("Camera Kiyo", True, 0), 
-            LiveFeed("Camera laptop", False, 0),
-            LiveFeed("Camera 4K Webcam", False, 0)
-        ] 
-    '''else:#-=x Use two recorded video files instead of live cameras.
-        feed_list = [
-            VideoFeed("Recorded Video 1 (Camera Original)", True, "Jasmijn/videos/recorded_output2.avi", loop=True),
-            VideoFeed("Recorded Video 2 (Camera 4K Webcam)", False, "Jasmijn/videos/recorded_output3.avi", loop=True),
-            VideoFeed("Recorded Video 2 (Camera 4K Webcam)", False, "Jasmijn/videos/recorded_output4.avi", loop=True),
-        ]'''
-        
-    scanner = CameraScanner(matrix_decoder, barcode_decoder, roi_detector, feed_list, debug = True)
+    # feed_list = [
+    #         LiveFeed("kiyo", True, 0),
+    #         LiveFeed("4k", False, 1),
+    #         LiveFeed("webcam", False, 2)
+    #         # LiveFeed("Kiyo", True, 0),
+    #         # LiveFeed("Webcam", False, 0),
+    #         # LiveFeed("4K", False, 0)
+
+
+    #         # dummy video om code te laten werken met wisselen profiel
+    #         # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/recorded_output3.avi", loop=True),
+    #         # VideoFeed("1Recorded Video (Camera Kiyo)", True, "Jasmijn_code/videos/wallet_test_mjpg_1.avi", loop=True),
+    
+    #         # scannen van 50 giftboxes
+    #         # LiveFeed("Camera 4K Webcam", False, giftbox_profile.camera_index),
+    #         # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/testrecord_4kV4.avi", loop=True),
+    #         # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/test_mjpg_1.avi", loop=True), # deze
+    #         # VideoFeed("Recorded Video (Camera 4K Webcam)", False, "Jasmijn_code/videos/test_raw.avi", loop=True),
+            
+    #         # scannen van 1 wallet per keer
+    #         # VideoFeed("Recorded Video (Camera Original)", True, "Jasmijn_code/videos/record_of_wallets_Kiyo_30secV6.avi", loop=True),
+    #         # LiveFeed("Camera Kiyo", True, 2), 
+    #         # VideoFeed("2Recorded Video (Camera Kiyo)", True, "Jasmijn_code/videos/wallet_test_mjpg_1.avi", loop=True),
+    # ]    
+    # scanner = CameraScanner(matrix_decoder, roi_detector, feed_list, debug = True)
+    
+    profiles = [ 
+    #   Profile_instance | use_live_flag | first_active_flag | loop_flag | video_path               
+        (standard_profile, True, True,  True, "Jasmijn_code/videos/wallet_test_mjpg_1.avi"),
+        (giftbox_profile,  True, False, True, "Jasmijn_code/videos/test_mjpg_1.avi"), 
+        (wallet_profile,   True, False, True, "Jasmijn_code/videos/wallet_test_mjpg_1.avi"), 
+    ]
+
+    Feeds = []    
+    for profile_instance, use_live_flag, first_active_flag, loop_flag, video_path in profiles:
+        if use_live_flag:
+            print(f"Using LIVE feed for profile '{profile_instance.name}' (Camera index {profile_instance.camera_index})")
+            Feeds.append(LiveFeed(f"Camera {profile_instance.name}", first_active_flag, profile_instance.camera_index))
+        else:
+            print(f"Using RECORDED VIDEO for profile '{profile_instance.name}' (Camera index {profile_instance.camera_index}) from file: {video_path}")
+            Feeds.append(VideoFeed(f"Recorded Video {profile_instance.name}", first_active_flag, video_path, profile_instance.camera_index, loop=loop_flag))
+    
+    feed_list = sorted(Feeds, key=lambda f: f.camera_index)
+    print("Sorting feed_list in order of ascending camera index:")
+    for feed in feed_list:
+        print(f" - {feed.name} (Camera index {feed.camera_index})")
+    
+    # Set up decoder and ROI detector
+    matrix_decoder = DataMatrixDecoder(use_threads=True, num_threads=16)
+    roi_detector = ROIAutoDetector(
+        expected_n_rois=50,
+        threadhold_value=182,
+        scaling_factor=2,
+    )
+
+    scanner = CameraScanner(matrix_decoder, roi_detector, feed_list, debug = True)
+
 
     global window
     app = QApplication(sys.argv)

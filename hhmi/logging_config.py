@@ -33,7 +33,7 @@ def approved(self, message, *args, **kwargs):
     if self.isEnabledFor(PROCESS_LEVEL_NUM_APPROVED):
         self._log(PROCESS_LEVEL_NUM_APPROVED, message, args, **kwargs)
 
-logging.Logger.approved = approved # type: ignore
+logging.Logger.approved = approved # type: ignore (logger.approved not in Logger by default)
 
 PROCESS_LEVEL_NUM_DENIED = 25
 logging.addLevelName(PROCESS_LEVEL_NUM_DENIED, "denied")
@@ -41,7 +41,7 @@ logging.addLevelName(PROCESS_LEVEL_NUM_DENIED, "denied")
 def denied(self, message, *args, **kwargs):
     if self.isEnabledFor(PROCESS_LEVEL_NUM_DENIED):
         self._log(PROCESS_LEVEL_NUM_DENIED, message, args, **kwargs)
-logging.Logger.denied = denied # type: ignore
+logging.Logger.denied = denied # type: ignore (logger.denied not in Logger by default)
 
 
 # --- Custom Formatter ---
@@ -97,7 +97,13 @@ class CustomFormatter(logging.Formatter):
 
 
 # ---------- Logger setup ----------
-def set_up_loger():
+def set_up_logger():
+    # Ensure environment and non-Python libs are configured first
+    try:
+        init_environment()
+    except Exception:
+        pass
+
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
@@ -118,13 +124,13 @@ def set_up_loger():
 
 # --- Test voorbeeld ---
 if __name__ == "__main__":
-    set_up_loger()
+    set_up_logger()
     logger = logging.getLogger()
 
     logger.debug("Dit is een DEBUG message")
-    logger.approved("Dit is een APPROVED message") # type: ignore
+    logger.approved("Dit is een APPROVED message") # type: ignore (logger.approved not in Logger by default)
     logger.info("Dit is een INFO message")
-    logger.denied("Dit is een DENIED message") # type: ignore
+    logger.denied("Dit is een DENIED message") # type: ignore (logger.denied not in Logger by default)
     logger.warning("Dit is een WARNING message")
     logger.error("Dit is een ERROR message")
     logger.critical("Dit is een CRITICAL message")
