@@ -41,7 +41,7 @@ class Page1(QWidget):
         self.status_box = QLabel()
         self.status_box.setText(
             "<span style='font-size:40px; font-weight:bold;'>Status:</span><br><br>"
-            "<span style='font-size:22px;'>Klik op 'Start Scan' om productsoort te laten scannen</span>"
+            "<span style='font-size:22px;'>Wachten op Robot verbinding</span>"
         )
         self.status_box.setAlignment(Qt.AlignCenter)
         # background-color: #00AEFF;
@@ -100,6 +100,7 @@ class Page1(QWidget):
         """)
         self.startButton.setFixedSize(300, 100)
         self.startButton.setEnabled(False)
+        self.startScanButton.setEnabled(False)
         grid.addWidget(self.startButton, 2, 3, 1, 1)
         grid.addWidget(self.startScanButton, 1, 3, 1, 1)
         grid.addWidget(self.status_box, 0, 1, 1, 5)
@@ -112,6 +113,9 @@ class Page1(QWidget):
     def enable_start(self):
         self.startButton.setEnabled(True)
 
+    def enable_startScan(self):
+        self.startScanButton.setEnabled(True)
+
     def update_status(self, text):
         # self.status_box.setText(text)
         self.status_box.setText(
@@ -119,6 +123,10 @@ class Page1(QWidget):
             f"<span style='font-size:22px;'>{text}</div>"
         )
 
+    def resetSelf(self):
+        self.update_status("Wachten op Robot verbinding")#"Klik op 'Start Scan' om productsoort te laten scannen")
+        self.startButton.setEnabled(False)
+        self.startScanButton.setEnabled(False)
 
 class Page2(QWidget):
     restart_requested = Signal()
@@ -130,6 +138,8 @@ class Page2(QWidget):
         grid = QGridLayout(self)
         grid.setContentsMargins(20, 20, 20, 20)
         grid.setSpacing(10)
+
+        self.wrongIndexes = []
 
         # --- LOGO LINKS-BOVEN ---
         self.logo_label = QLabel(self)
@@ -169,8 +179,8 @@ class Page2(QWidget):
         self.wallet_errorcount = 0
         self.wallet_errorStatus = QLabel()
         self.wallet_errorStatus.setText(
-            "<span style='font-size:30px; font-weight:bold;'>Aantal fout:</span><br><br>"
-            "<span style='font-size:22px;'>0</span>"
+            f"<span style='font-size:30px; font-weight:bold;'>Aantal fout:</span><br><br>"
+            f"<span style='font-size:22px;'>{self.wallet_errorcount}</div>"
         )
         self.wallet_errorStatus.setStyleSheet("""
             background-color: #F1B8A4;
@@ -267,7 +277,7 @@ class Page2(QWidget):
                 self.error_event.set()
             if self.done_event:
                 self.done_event.set()  # signaliseer aan worker dat run klaar is
-            self.errorwindow("Er zijn te veel fout gelinkte portemonnees, proces beëindigd")
+            self.errorwindow("Er zijn te veel fout gelinkte portemonnees, proces beëindigd","Proces beëindigd<br>Te veel fout gelinkte portemonnees met hun giftbox")
 
     def create_wallets(self, number_of_wallets, per_row=5):
         for lbl in self.wallet_statusbox:
@@ -291,6 +301,17 @@ class Page2(QWidget):
                     """)
             self.wallet_container_layout.addWidget(lbl, row, col)
             self.wallet_statusbox.append(lbl)
+
+    def reset_Wallet_status(self):
+        for i in range(len(self.wallet_statusbox)):
+            self.wallet_statusbox[i].setStyleSheet("""
+                        background-color: white;
+                        border: 1px solid black;
+                        color: black;
+                        padding: 6px;
+                        font-size: 11px;
+                        font-weight: bold;
+                    """)
 
     def update_wallet_status(self, index, status):
         index -= 1
@@ -316,7 +337,9 @@ class Page2(QWidget):
         self.wallet_statusbox[index].setStyleSheet(
             f"background-color: {color}; border: 1px solid black; color: black; padding: 6px;font-size: 11px;font-weight: bold;")
         if status == "unsuccessful":
-            self.errorCount()
+            self.wrongIndexes.append(index)
+            if self.wrongIndexes.count(index) <= 1:
+                self.errorCount()
 
         if self.current_Wallet == len(self.wallet_statusbox):
             self.doneState()
@@ -349,7 +372,7 @@ class Page2(QWidget):
             self.blink_timers[index].deleteLater()
             del self.blink_timers[index]
 
-    def errorwindow(self, errorMSG):
+    def errorwindow(self, errorMSG, statusMSG):
         error = self.Errormsg
         error.setWindowTitle("ERROR")
         error.setText(f"{errorMSG}")
@@ -382,7 +405,7 @@ class Page2(QWidget):
         button = error.exec()
         if button == QMessageBox.StandardButton.Ok:
             button = QMessageBox.StandardButton.RestoreDefaults
-            self.update_status("Proces beëindigd<br>Te veel fout gelinkte portemonnees met hun giftbox")
+            self.update_status(statusMSG)
             self.okErrorPressed()
 
     def set_done_event(self, event):
@@ -434,12 +457,39 @@ class Page2(QWidget):
         print("restart")
         self.restartButton.show()
 
+    def resetSelf(self):
+
+        #self.wrongIndexes.clear()
+        self.wallet_errorcount = 0
+        self.wallet_errorStatus.setText(
+           f"<span style='font-size:30px; font-weight:bold;'>Aantal fout:</span><br><br>"
+          f"<span style='font-size:22px;'>{self.wallet_errorcount}</div>")
+        self.update_status("Inpakken gestart")
+
+        self.restartButton.hide()
+        self.reset_Wallet_status()
+
+        '''for lbl in self.page2.wallet_statusbox:
+            lbl.setStyleSheet("""
+                background-color: white;
+                border: 1px solid black;
+                color: black;
+                padding: 6px;
+                font-size: 11px;
+                font-weight: bold;
+            """)'''
+
+        # Switch page
+        self.error_event.clear()
+        self.done_event.clear()
+
 
 class mainWindow(QMainWindow):
     page2_shown = Signal()
 
     def __init__(self):
         super().__init__()
+        self.currentPageIndex = 0
         self.setWindowTitle("Secrid Robot")
         self.resize(1920, 1080)
         self.setStyleSheet("background-color: #F2F1ED;")
@@ -464,42 +514,33 @@ class mainWindow(QMainWindow):
         # flag: start-knop werd gedrukt (wordt gezet door switch_to_page2 als start=True)
         self.start_was_pressed = False
 
-    def eventFilter(self, obj, event):
+    def currentPageChange(self, pageIndex):
+        self.currentPageIndex = pageIndex
+       
+    def whichPage(self):
+        return self.stack.currentIndex()
+
+    '''def eventFilter(self, obj, event):
         if event.type() == QEvent.KeyPress:
             text = event.text().lower()
             if text == "s":  # als iemand 's' indrukt (barcode scanner → "start")
                 print("Scanner: start ontvangen")
                 self.page1.enable_start()
-        return super().eventFilter(obj, event)
+        return super().eventFilter(obj, event)'''
 
     def switch_to_page2(self, start=False):
         # start argument is gezet door Page1 via start_clicked
         self.start_was_pressed = start
         self.stack.setCurrentWidget(self.page2)
         self.page2_shown.emit()
+        #self.currentPage(2)
 
     def go_to_page1(self):
         # Reset Page1 UI
-        self.page1.update_status("Klik op 'Start Scan' om productsoort te laten scannen")
-        self.page1.startButton.setEnabled(False)
+        #self.currentPage(1)
+        self.page1.resetSelf()
 
         # Reset Page2 error count en wallets
-        self.page2.wallet_errorcount = 0
-        #self.page2.wallet_errorStatus.setText("Aantal Errors: 0")
-        self.page2.update_status("Inpakken gestart")
-        self.page2.restartButton.hide()
-
-        for lbl in self.page2.wallet_statusbox:
-            lbl.setStyleSheet("""
-                background-color: white;
-                border: 1px solid black;
-                color: black;
-                padding: 6px;
-                font-size: 11px;
-                font-weight: bold;
-            """)
-
-        # Switch page
-        self.page2.error_event.clear()
-        self.page2.done_event.clear()
+        self.page2.resetSelf()
+        
         self.stack.setCurrentWidget(self.page1)

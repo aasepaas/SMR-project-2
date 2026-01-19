@@ -3,10 +3,15 @@
 class DatabaseConfig
 {
 
-    public $servernaam = "192.168.1.105";
-    public $gebruikersnaam = "root";
-    public $wachtwoord = "your_password";
-    public $databasenaam = "your_database";
+    #public $servernaam = "192.168.1.105";
+   #public $gebruikersnaam = "root";
+    #public $wachtwoord = "your_password";
+   #public $databasenaam = "your_database";'''
+
+     public $servernaam = "127.0.0.1";
+    public $gebruikersnaam = "aashish_de_furry";
+    public $wachtwoord = "gekkedelftenaar";
+    public $databasenaam = "test";
 
     public $iterator = 1;
     public $conn;
@@ -15,7 +20,7 @@ class DatabaseConfig
     {
         $this->servernaam = $server;
         $this->gebruikersnaam = $gebr;
-        $this->wachtwoord = (string)$ww;
+        $this->wachtwoord = (string) $ww;
         $this->databasenaam = $db;
         $this->conn = $this->connect($server, $gebr, $ww, $db);
     }
@@ -24,7 +29,7 @@ class DatabaseConfig
 
     function connect($server, $gebruikersnaam, $wachtwoord, $db)
     {
-        $conn = new mysqli($server, $gebruikersnaam, (string)$wachtwoord, $db);
+        $conn = new mysqli($server, $gebruikersnaam, (string) $wachtwoord, $db);
         if ($conn->connect_error) {
             die("Connection failed: " . $conn->connect_error);
         }
@@ -36,6 +41,7 @@ class DatabaseConfig
     {
         $sqlq = $this->conn->prepare("INSERT INTO `premium-wallet` (`Number`, `BoxID`, `ID`) VALUES (?, ?, ?)");
         $sqlq->bind_param("ssi", $boxid, $id, $number);
+        #$sqlq->bind_param("iss", $number, $boxid, $id);
         $sqlq->execute();
         $checkinsert = $sqlq->affected_rows;
         if ($checkinsert) {
@@ -77,14 +83,17 @@ class DatabaseConfig
     public function checkID($boxid, $id)
     {
         $dbid = $this->determineMatchingId($boxid);
-        if ($dbid == null) {
+        if ($dbid != $id) {
+            $sqlq = $this->conn->prepare("UPDATE 'premium-wallet' SET 'Succesful_Match' = 'False' WHERE 'BoxID' = ? ");
+            $sqlq->bind_param("s", $boxid);
+            $sqlq->execute();
             return false;
-        } elseif ($dbid == $id) {
-            return true;
         } else {
-            return false;
+            $sqlq = $this->conn->prepare("UPDATE `premium-wallet` SET `Succesful_Match` = 'True' WHERE `BoxID` = ? ");
+            $sqlq->bind_param("s", $boxid);
+            $sqlq->execute();
+            return true;
         }
-
 
 
     }

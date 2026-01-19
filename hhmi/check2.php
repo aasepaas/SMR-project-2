@@ -10,7 +10,8 @@ function check_boxid($vals)
 
     $boxid = $vals['boxid'];
     #$db = new DatabaseConfig("192.168.1.105", "aashish_de_furry", "gekkedelftenaar", "test");
-    $db = new DatabaseConfig("localhost", "root", "", "test");
+    $db = new DatabaseConfig("localhost", "aashish_de_furry", "gekkedelftenaar", "test");
+    #$db = new DatabaseConfig("145.52.134.234", "aashish_de_furry", "gekkedelftenaar", "test");
     $result = $db->check_box_id($boxid);
     echo json_encode(["result" => $result]);
     $db->closeConnection();
@@ -21,7 +22,8 @@ function final_check($vals)
     $boxid = $vals['boxid'];
     $id = $vals['id'];
     #$db = new DatabaseConfig("192.168.1.105", "aashish_de_furry", "gekkedelftenaar", "test");
-    $db = new DatabaseConfig("localhost", "root", "", "test");
+    $db = new DatabaseConfig("localhost", "aashish_de_furry", "gekkedelftenaar", "test");
+    #$db = new DatabaseConfig("145.52.134.234", "aashish_de_furry", "gekkedelftenaar", "test");
     $result = $db->checkID($boxid, $id);
     echo json_encode(["result" => $result]);
     $db->closeConnection();
