@@ -104,7 +104,7 @@ def get_sig(coords):
 end
 
 def get_fail(coords):
-    return coords[7]
+    return coords[8]
 end
 
 ########################################
