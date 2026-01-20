@@ -135,6 +135,131 @@ end
 # ----------- MOVES --------------------
 ########################################
 
+
+def moveto_target_coords(coords):
+
+    pose = makepose(coords)
+    sig = get_sig(coords)
+    set_standard_analog_out(0, 0)
+    if sig == 1:
+      set_standard_analog_out(0, 0.282)
+    end
+
+    
+    if sig == 0:
+       set_standard_analog_out(0, 0.0)
+        movel(predoospickup, t = 0.1)
+        set_standard_digital_out(0, True)
+        movel(pose, t = 0.5)
+   
+        movel(predoospickup, t = 0.1)
+        set_standard_analog_out(0, 0.33)
+        sleep(0.7)
+        set_standard_digital_out(0, False)
+        #movel(postdoospickup)
+    end
+      
+    if sig == 1:
+        movej(prewalletpickup, t= 0.1)
+        set_standard_analog_out(0, 0.275)
+        sleep(2.5)
+        set_standard_digital_out(1, True)
+        sleep(0.5)
+        set_standard_digital_out(2, True)
+        set_standard_analog_out(1, 0.0)
+   
+   
+   
+   
+        sleep(0.1)
+        movel(pose, t = 0.1)
+        set_standard_analog_out(0, 0.33)
+        sleep(2)
+        movel(prewalletpickup, t = 0.1)
+    end
+end 
+
+
+def moveto_opener(failstate=False, sig):
+   if sig == 0:
+       if fail == 1:
+           movej(postposscan)
+           movel(walletplacing1)
+           set_standard_analog_out(0, 0.0)
+           sleep(0.2)
+           movel(postwalletplacing)
+           set_standard_analog_out(1, 0.23) 
+           sleep(1)
+           set_standard_digital_out(2, False)
+           sleep(0.1)
+           set_standard_digital_out(1, False)
+           set_standard_analog_out(1, 0.0) 
+           set_standard_analog_out(0, 0.25)
+
+           movel(doosbovenmal, t = 0.5)
+           movel(doosbovenmal2, t = 0.5)
+           movel(doosinmal, t = 0.5)
+           sleep(0.5)
+           movel(doosinmal2)
+           set_standard_analog_out(0, 0.24)
+           sleep(1)
+           movel(robotnamal, t = 1)
+       else:
+           
+
+           set_standard_analog_out(0, 0.33)
+           movej(fail, a=1.2, v=0.5)
+           movej(set_pose_z(failurepos, lowerzwallet))
+           set_standard_analog_out(0, 0.2)
+           movej(set_pose_z(failurepos, raisezwallet))
+       end
+    else:
+    
+        if failstate:
+           movej(failpos)
+           set_standard_analog_out(0, 0.0)
+        else:
+        
+           movej(postposscan)
+           movel(walletplacing1)
+           set_standard_analog_out(0, 0.0)
+           sleep(0.2)
+           movel(postwalletplacing)
+           set_standard_analog_out(1, 0.23) 
+           sleep(1)
+           set_standard_digital_out(2, False)
+           sleep(0.1)
+           set_standard_digital_out(1, False)
+           set_standard_analog_out(1, 0.0) 
+           set_standard_analog_out(0, 0.25)
+      end
+    end
+end
+        
+
+
+def pickupfinishedbox():
+   set_standard_digital_out(2, False)
+   sleep(0.1)
+   set_standard_digital_out(1, False)
+   set_standard_analog_out(1, 0.0) 
+   set_standard_analog_out(0, 0.25)
+   sleep(2)
+   movel(pickbox, t = 0.1)
+   
+   set_standard_analog_out(0, 0.33)
+   sleep(1)
+   movel(afterpickbox, t = 0.1)
+   movel(postafterpickbox, t = 0.5)
+   movel(finalpospre1, t = 0.1)
+   movel(finalpospre2, t = 0.1)
+   set_standard_analog_out(0, 0.0)
+   sleep(1)
+   movel(finalposreal, t = 0.1)
+   movel(finalpospre1, t = 0.1)
+   movej(predoospickup, t = 0.1)
+
+end 
 def moveto_scanner():
     movej(posscan, a=1.2, v=0.25)
 end
