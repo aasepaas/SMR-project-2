@@ -65,8 +65,12 @@ def makepose(coords):
     return p[coords[2], coords[3], coords[4], coords[5], coords[6], coords[7]]
 end
 
-def get_sigs(coords):
-    return coords[-1], coords[1]
+def get_sig(coords):
+    return coords[1]
+end
+
+def get_fail(coords):
+    return coords[8]
 end
 
 sec activate_suction_cup():
@@ -96,20 +100,20 @@ end
 def moveto_target_coords(coords):
 
     pose = makepose(coords)
-    sig, _ = get_sigs(coords)
+    sig = get_sig(coords)
     set_standard_analog_out(0, 0)
     if sig == 1:
       set_standard_analog_out(0, 0.282)
     end
 
-    movej(pose, a=1.2, v=0.25)
+    
     if sig == 0:
        set_standard_analog_out(0, 0.0)
         movel(predoospickup, t = 0.1)
         set_standard_digital_out(0, True)
-        #movel(doospickup, t = 0.5)
+        movel(pose, t = 0.5)
    
-        #movel(predoospickup, t = 0.1)
+        movel(predoospickup, t = 0.1)
         set_standard_analog_out(0, 0.33)
         sleep(0.7)
         set_standard_digital_out(0, False)
@@ -117,16 +121,22 @@ def moveto_target_coords(coords):
     end
       
     if sig == 1:
-      movej(Walletprepickup, a=1.2, v=0.5)
-      sleep(0.01)
-      movel(set_pose_z(pose, Walletpickupz))
-
-      set_standard_analog_out(0, 0.33) 
-      set_standard_digital_out(1, True)
-      sleep(0.5)
-      set_standard_digital_out(2, True)
-      movel(set_pose_z(pose, Walletpostpickupz))
-      set_standard_analog_out(1, 0.055)
+        movej(prewalletpickup, t= 0.1)
+        set_standard_analog_out(0, 0.275)
+        sleep(2.5)
+        set_standard_digital_out(1, True)
+        sleep(0.5)
+        set_standard_digital_out(2, True)
+        set_standard_analog_out(1, 0.0)
+   
+   
+   
+   
+        sleep(0.1)
+        movel(pose, t = 0.1)
+        set_standard_analog_out(0, 0.33)
+        sleep(2)
+        movel(prewalletpickup, t = 0.1)
     end
 end
 
