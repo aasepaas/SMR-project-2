@@ -1,0 +1,176 @@
+########################################
+# ----------- POSITIONS ----------------
+########################################
+
+Doosprepickup = p[0.53372, -0.27139, 0.32368, 0.0, 3.141, 0]
+Doospickup = p[0.53372, -0.27139, 0.22368, 0.0, 3.141, 0]
+doospickupz = 0.22368
+Doospostpickup = p[0.53372, -0.27139, 0.37368, 0.0, 3.141, 0]
+Doospostpickupz = 0.37368
+Doosmidpostpickup = p[0.53372, -0.27139, 0.33368, 0.0, 3.141, 0]
+Doosmidpostpickupz = 0.33368
+
+DoosBovenMoldHoog = p[0.25603, -0.69603, 0.3592, 0.039, 2.287, 2.151]
+DoosBovenMoldMidden = p[0.25603, -0.69603, 0.09392, 0.039, 2.287, 2.151]
+DoosBovenMoldMiddenz = 0.09392
+DoosBovenMold = p[0.25603, -0.69603, 0.06292, 0.039, 2.287, 2.151]
+DoosBovenMoldz = 0.06292
+NaDoosPlaatsing = p[0.25603, -0.7495, 0.06292, 0.039, 2.287, 2.151]
+
+PreDoosPickupMold = p[0.25603, -0.7495, 0.04850, 0.039, 2.287, 2.151]
+PreDoosPickupMoldz = 0.04850
+DoosPickupMold = p[0.25103, -0.69603, 0.04850, 0.039, 2.287, 2.151]
+
+PreDoosPickupMoldNaWallet = p[0.25103, -0.7495, 0.14087, 0.039, 2.287, 2.151]
+NaDoosPlaatsingHoog = p[0.25103, -0.69603, 0.3592, 0.039, 2.287, 2.151]
+
+pickup = p[0.55587, 0.12303, 0.19429, 0.029, -3.141, 0]
+postpickup = p[0.55587, 0.12303, 0.39429, 0.029, -3.141, 0]
+postpickupz = 0.39429
+
+posscan = p[0.29504, -0.32626, 0.27504, 0.080, 3.141, 0]
+
+Walletprepickup = p[0.55587, 0.12303, 0.39429, 0.029, -3.141, 0]
+Walletpickup = p[0.55587, 0.12303, 0.19429, 0.029, -3.141, 0]
+Walletpickupz = 0.19429
+Walletpostpickup = p[0.55587, 0.12303, 0.39429, 0.029, -3.141, 0]
+Walletpostpickupz = 0.39429
+
+WalletPrePlacingHigh = p[0.307, -0.69686, 0.30270, 0.170, -2.297, -2.234]
+WalletPrePlacingMedium = p[0.28297, -0.68467, 0.10530, 0.916, -2.510, -2.331]
+WalletPrePlacingLow = p[0.27235, -0.68424, 0.09079, 1.029, -2.516, -2.383]
+WalletPlacing = p[0.25893, -0.68811, 0.08162, 1.013, -2.486, -2.411]
+WalletPostPlacing = p[0.27990, -0.68949, 0.08919, 1.165, -2.601, -2.417]
+WalletPostPlacingBack = p[0.25395, -0.72747, 0.09172, 0.073, -2.506, -2.081]
+WalletPushingAfterPlacing = p[0.25533, -0.68291, 0.11747, 0.011, 2.583, 1.719]
+WalletAfter = p[0.25900, -0.72501, 0.14087, 0.003, 2.641, 1.612]
+
+########################################
+# ----------- SOCKET -------------------
+########################################
+
+ip = "192.168.0.101"
+socket_name = "socket1"
+
+########################################
+# ----------- HELPERS ------------------
+########################################
+
+def set_pose_z(pose, new_z):
+    return p[pose[0], pose[1], new_z, pose[3], pose[4], pose[5]]
+end
+
+def makepose(coords):
+    return p[coords[2], coords[3], coords[4], coords[5], coords[6], coords[7]]
+end
+
+def get_sig(coords):
+    return coords[0]
+end
+
+def get_fail(coords):
+    return coords[7]
+end
+
+########################################
+# ----------- IO -----------------------
+########################################
+
+sec activate_suction_cup():
+    set_standard_digital_out(0, True)
+end
+
+def deactivate_suction_cup():
+    set_standard_digital_out(0, False)
+end
+
+def open_gripper():
+    set_standard_analog_out(0, 0)
+end
+
+def close_gripper_pre_wallet():
+    set_standard_analog_out(0, 0.282)
+end
+
+def close_gripper_box():
+    set_standard_analog_out(0, 0.17)
+end
+
+def close_gripper_full():
+    set_standard_analog_out(0, 0.33)
+end
+
+########################################
+# ----------- MOVES --------------------
+########################################
+
+def moveto_scanner():
+    movej(posscan, a=1.2, v=0.25)
+end
+
+def moveto_home():
+    #movel(home_pos, a=1.2, v=0.25)
+end
+
+
+def main():
+    socket_open(ip, 12344, socket_name)
+     testmsg = socket_read_string(socket_name, timeout=0)
+
+    while True:
+        textmsg(testmsg)
+        testmsg = socket_read_string(socket_name, timeout=0)
+        if testmsg == "start":
+            break
+        end
+        sleep(0.1)
+    end
+
+    while True:
+        socket_send_string("SEND_GIFTBOX_COORDINATES", socket_name)
+        sleep(1.5)
+
+        coords = socket_read_ascii_float(8, socket_name, timeout=0)
+        #textmsg("Received coordinates: " + coords)
+        if coords == []:
+            sleep(0.1)
+            continue
+        end
+
+        textmsg("Received coordinates: ", coords)
+
+        if coords == [0,0,0,0,0,0,0,0]:
+            textmsg("Homing robot")
+            #moveto_home()
+            break
+        end
+
+        sleep(1.5)
+
+        socket_send_string("SEND_WALLET_COORDINATES", socket_name)
+        coords = socket_read_ascii_float(8, socket_name, timeout=0)
+        textmsg("Received coordinates: ",  coords)
+        sleep(1.5)
+        socket_send_string("SCAN_WALLET", socket_name)
+        correct = socket_read_string(socket_name, timeout=0)
+        textmsg("passed check: ",  correct)
+        sleep(1.5)
+        socket_send_string("DONE_CYCLE", socket_name)
+        correct = socket_read_string(socket_name, timeout=0)
+        textmsg("Received coordinates: " + correct)
+        sleep(1.5)
+
+
+
+
+        sleep(0.5)
+    end
+
+    socket_close(socket_name)
+end
+
+########################################
+# ----------- START --------------------
+########################################
+
+activate_suction_cup()
