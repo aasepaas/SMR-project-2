@@ -252,25 +252,26 @@ end
 
 
 def pickupfinishedbox():
-   set_standard_analog_out(1, 0.11)
-   movel(PreDoosPickupMoldNaWallet)
-   set_standard_analog_out(0, 0.25)
-   movel(PreDoosPickupMold)
-   sleep(1)
    set_standard_digital_out(2, False)
-   set_standard_digital_out(1, False)
-   sleep(0.5)
-   set_standard_analog_out(1, 0.055)
-   sleep(1.5)
-   movel(DoosPickupMold)
    sleep(0.1)
+   set_standard_digital_out(1, False)
+   set_standard_analog_out(1, 0.0) 
+   set_standard_analog_out(0, 0.25)
+   sleep(2)
+   movel(pickbox, t = 0.1)
+   
    set_standard_analog_out(0, 0.33)
-   sleep(0.5)
-   movel(DoosBovenMoldHoog)
-   sleep(0.01)
-   movel(Doospostpickup)
-   movel(Doosmidpostpickup)
+   sleep(1)
+   movel(afterpickbox, t = 0.1)
+   movel(postafterpickbox, t = 0.5)
+   movel(finalpospre1, t = 0.1)
+   movel(finalpospre2, t = 0.1)
    set_standard_analog_out(0, 0.0)
+   sleep(1)
+   movel(finalposreal, t = 0.1)
+   movel(finalpospre1, t = 0.1)
+   movej(predoospickup, t = 0.1)
+
 end 
 
 
