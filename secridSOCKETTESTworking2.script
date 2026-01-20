@@ -100,7 +100,7 @@ def makepose(coords):
 end
 
 def get_sig(coords):
-    return coords[0]
+    return coords[1]
 end
 
 def get_fail(coords):
@@ -191,7 +191,8 @@ def main():
 
         coords = socket_read_ascii_float(8, socket_name, timeout=0)
         textmsg("Received coordinates:", coords)
-  
+        sig = get_sig(coords)
+        fail = get_fail(coords)
 
         textmsg("Received coordinates: ", coords)
 
@@ -203,14 +204,15 @@ def main():
         set_standard_analog_out(0, 0.0)
         movel(predoospickup, t = 0.1)
         set_standard_digital_out(0, True)
-        #movel(doospickup, t = 0.5)
+        movel(doospickup, t = 0.5)
    
-        #movel(predoospickup, t = 0.1)
+        movel(predoospickup, t = 0.1)
         set_standard_analog_out(0, 0.33)
         sleep(0.7)
         set_standard_digital_out(0, False)
         #movel(postdoospickup)
-   
+        moveto_opener(failstate=False, sig)
+        
 
         sleep(1.5)
 
@@ -238,6 +240,10 @@ def main():
         sleep(1.5)
         socket_send_string("SCAN_WALLET", socket_name)
         correct = socket_read_string(socket_name, timeout=0)
+        if correct == "true":
+          moveto_opener(failstate=False, sig)
+        else:
+          moveto_opener(failstate=True, sig)
         textmsg("passed check: ",  correct)
         sleep(1.5)
         socket_send_string("CYCLE_COMPLETED", socket_name)
