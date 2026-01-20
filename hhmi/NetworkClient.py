@@ -213,6 +213,7 @@ class Network_client:
             return False
         if not isinstance(message, str):
             message = str(message).replace("[", "(").replace("]", ")")
+
         try:
             print(f"Network_client: sending to {addr}: {message}")
             sock.send(message.encode('utf-8'))
@@ -228,6 +229,23 @@ class Network_client:
 
     def clse_socket(self):
         return self.stop_socket()
+
+    def sendErrorToClient(self, message):
+        print(message)
+        with self._client_lock:
+            sock = self.client_socket
+            addr = self.client_addr
+        if not sock:
+            print("Network_client.send_client: no connected client")
+            return False
+        try:
+            print(f"Network_client: sending to {addr}: {message}")
+            sock.send(message.encode('utf-8'))
+            return True
+        except Exception as e:
+            print(f"Network_client.send_client exception: {e}")
+            self._handle_client_disconnect()
+            return False
 
     def stop_socket(self):
         """

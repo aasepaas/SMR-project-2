@@ -86,6 +86,10 @@ class Worker(QObject):
             # 0 is error situatie, 1 is normale situatie
 
             self.net_client.clear_queue()
+            if not self.net_client.is_connected():
+                self.net_client.stop_socket()
+                time.sleep(0.2)
+                self.net_client.start_server()
             self.klaarSituatie = 0
         except Exception as e:
             print(f"restart_triggered: disconnect error: {e}")
@@ -116,15 +120,23 @@ class Worker(QObject):
 
             # Wait for a client to connect (non-blocking check)
             if errorOfDoneGestuurd:
-                if self.klaarSituatie == 0:
-                    self.net_client.send_client("Error")
+                # if self.klaarSituatie == 0:
+                #     self.net_client.send_client("0 0 0 0 0 0 0 0")
 
-                elif self.klaarSituatie == 1:
-                    self.net_client.send_client("Done")
-                errorOfDoneGestuurd = False
+                # elif self.klaarSituatie == 1:
+                #     self.net_client.send_client("0 0 0 0 0 0 0 0")
+                try:
+                    cmd = self.net_client.get_message(timeout=0.5)
+                except Exception:
+                    cmd = None
+
+                if cmd == "SEND_GIFTBOX_COORDINATES":
+                    self.net_client.send_client("(0, 0, 0, 0, 0, 0, 0, 0)")
+                    errorOfDoneGestuurd = False
 
 
             if not self.clientConnected:
+                print("not connected")
                 if self.net_client.is_connected():
                     self.clientConnected = True
                     self.startScan.emit(True)
@@ -159,6 +171,7 @@ class Worker(QObject):
                 batchCompleted = False
                 total_wallets =  50 #len(self.window.page2.wallet_statusbox)
                 self.scanner.switch_profile(standard_profile)
+                current_state = SMNState.IDLE
                 
 
                 # Main processing loop
@@ -297,6 +310,13 @@ class Worker(QObject):
     def checkBreakInCode(self):
         print("check break in code")
 
+    def custom_key(n):
+        last_digit = n % 10
+
+        # gewenste volgorde van laatste cijfers
+        order = [0, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+        return (order.index(last_digit), n)
+
     def scanButtonPressed(self):
         self.scanner.switch_profile(giftbox_profile)
         time.sleep(0.5)
@@ -309,9 +329,18 @@ class Worker(QObject):
                 break
                 
 
-        resultsGiftboxScanDict = dict(sorted(resultsGiftboxScanDict.items()))
-        ordered_keys = sorted(resultsGiftboxScanDict.keys())
-        ordered_values = [resultsGiftboxScanDict[k] for k in ordered_keys]    
+        #resultsGiftboxScanDict = dict(sorted(resultsGiftboxScanDict.items()))
+        #ordered_keys = sorted(resultsGiftboxScanDict.keys())
+        #ordered_values = [resultsGiftboxScanDict[k] for k in ordered_keys]  
+        order_map = {v: i for i, v in enumerate([0, 9, 8, 7, 6, 5, 4, 3, 2, 1])}
+        ordered_dict = dict(
+            sorted(
+                resultsGiftboxScanDict.items(),
+                key=lambda item: (order_map[item[0] % 10], item[0])
+            )
+        )
+
+        ordered_values = list(ordered_dict.values())
         
         if len(ordered_values) > 47:
             indexCurrentWallet = 1
@@ -357,10 +386,17 @@ class Worker(QObject):
                 self.giftboxAndWalletCheck = False
                 return False
         else:
-            verwerkteVerzendData = [1] + self.walletCoords[self.indexCurrentWallet-1]
-            print(verwerkteVerzendData)
-            self.net_client.send_client(verwerkteVerzendData)
-            return True
+            if self.giftboxValues[self.indexCurrentWallet-1][1] == True:
+                verwerkteVerzendData = self.walletCoords[self.indexCurrentWallet-1] + [1]  
+                print(verwerkteVerzendData)
+                self.net_client.send_client(verwerkteVerzendData)
+                return True
+            else:
+                verwerkteVerzendData = self.walletCoords[self.indexCurrentWallet-1] + [0]  
+                print(verwerkteVerzendData)
+                self.net_client.send_client(verwerkteVerzendData)
+                return True
+
 
     
     def scanGiftbox(self):

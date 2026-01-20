@@ -22,18 +22,18 @@ class CSVHandler():
 
     def selectwallettype(self, identifier):
         wallet_types = {
-            '1': 'wallets.csv',
-            '2': 'wallets.csv',
-            '3': 'wallets.csv'}
-        self.chosenWallet = wallet_types.get(identifier, 'wallets.csv')
+            '1': 'walletCoordinates.csv',
+            '2': 'walletCoordinates.csv',
+            '3': 'walletCoordinates.csv'}
+        self.chosenWallet = wallet_types.get(identifier, 'walletCoordinates.csv')
         self.setfilepath(True)
 
     def selectgiftboxtype(self, identifier):
         giftbox_types = {
-            '1': 'giftbox.csv',
-            '2': 'giftbox.csv',
-            '3': 'giftbox.csv'}
-        self.chosenGiftbox = giftbox_types.get(identifier, 'giftbox.csv')
+            '1': 'giftboxCoordinates.csv',
+            '2': 'giftboxCoordinates.csv',
+            '3': 'giftboxCoordinates.csv'}
+        self.chosenGiftbox = giftbox_types.get(identifier, 'giftboxCoordinates.csv')
         self.setfilepath(False)
 
     def setfilepath(self, indicatorWallterOrGiftbox):

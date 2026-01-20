@@ -122,7 +122,7 @@ def main():
     done_event = Event()
     window.page2.set_done_event(done_event)
 
-    client_socket = Network_client('127.0.0.1', 12344)
+    client_socket = Network_client('192.168.0.101', 12344)  #('127.0.0.1', 12344)#('192.168.0.101', 12344)
     client_socket.strt_socket()
 
     # Thread aanmaken
