@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 import cv2
 
-from profile_setup import ScanProfile, standard_profile, wallet_profile, giftbox_profile, barcode_profile
+from profile_setup import ScanProfile, standard_profile
 
 # Debugging
-from logging_config import set_up_loger
+from logging_config import set_up_logger
 import logging
 logger = logging.getLogger()
-set_up_loger()
+set_up_logger()
 
 """
 Verantwoordelijk voor het openen van de camera met de juiste index.
@@ -58,25 +58,28 @@ class PictureFeed(Feed):
 
 
 class VideoFeed(Feed):
-    def __init__(self, name, active, file_name, acceleration=1.0, loop: bool = False) -> None:
+    def __init__(self, name, active, file_name, camera_index = 0, acceleration=1.0, loop: bool = False) -> None:
         super().__init__(name, active)
         self.file_name = file_name
+        self.camera_index = camera_index
         self.acceleration = acceleration
         self.loop = bool(loop)
         
         self.cap = cv2.VideoCapture(self.file_name)
         # fps = self.cap.get(cv2.CAP_PROP_FPS) * self.acceleration
         # wait_time = int(1000 / fps) if fps > 0 else 30
-    
+        if self.cap.isOpened():
+            logger.info(f"Opened video file '{self.file_name}'")
+        
     def __del__(self):
-        """ Safely release camera. """
-        print("Releasing camera...")
+        """ Safely release capture. """
+        print(f"Stopping video {self.file_name}...")
         self.cap.release()
         
     def openFeed(self):
         while True:
             ret, frame = self.cap.read()
-
+        
             if ret:
                 yield frame
                 
@@ -84,7 +87,7 @@ class VideoFeed(Feed):
                 print("\nEnd of video...\n")
                 break
             
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 1) # Restart video at 1 to ensure proper reading
             continue
             
    
@@ -112,15 +115,18 @@ class LiveFeed(Feed):
         # if not retrieved:
         #     print("\nFailed to retrieve frame...\n")
         #     break
-        
-        while True: #self.isactive:             
-            ret, frame = self.cap.read()
-            if not ret:
-                print("\nNo longer connected to camera...\n")
-                break
-
-            yield frame
-
+        try: 
+            while True: #self.isactive:             
+                ret, frame = self.cap.read()
+                if not ret:
+                    print("\nNo longer connected to camera...\n")
+                    break
+                # if self.camera_index == 0: 
+                #     frame = cv2.rotate(frame, cv2.ROTATE_180)  # Mirror for internal camera
+                yield frame
+        finally:
+            self.__del__
+            
     def configure_camera(self, profile: ScanProfile, set_resolution: bool = False) -> None: 
         """ Apply all camera settings from the profile (single source of truth."""
         
@@ -185,10 +191,12 @@ class LiveFeed(Feed):
         logger.info(f"Set camera {self.camera_index} ({self.name}) resolution to: {width} x {height}")
         
 # Import functions    
-def resize_frame(frame, scale_percent: float = 2): # was 1.2 # ratio 640 / 360 = 16:9
-    width = int(640 * scale_percent) 
-    height = int(360 * scale_percent)       
-    resized = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
+
+def resize_frame(frame, scale: float = 1.5, old_width:int = 0, old_height:int = 0): # was 1.2 # ratio 640 / 360 = 16:9
+    if old_width != 0 and old_height != 0:
+        resized = cv2.resize(frame, (int(old_width * scale), int(old_height * scale)), interpolation=cv2.INTER_AREA)
+    else:
+        resized = cv2.resize(frame, (int(640 * scale), int(360 * scale)), interpolation=cv2.INTER_AREA)
     return resized
 
 def display_camera_info(*texts, frame, font_scale=0.5):

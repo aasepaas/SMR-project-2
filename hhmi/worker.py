@@ -1,5 +1,6 @@
 
 from asyncio.windows_events import NULL
+from http.client import NETWORK_AUTHENTICATION_REQUIRED
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QThread, Signal, QObject
 from mainwindow import mainWindow
@@ -20,13 +21,15 @@ from SMN import (
 )
 
 from feed import LiveFeed, VideoFeed
-from camera_scanner import CameraScanner
+from camera_scanner import CameraScanner, standard_profile
 from decoders import DataMatrixDecoder, BarcodeDecoder
 from roi_auto_detector import ROIAutoDetector
-from profile_setup import wallet_profile, giftbox_profile, barcode_profile
+#from profile_setup import wallet_profile, giftbox_profile, barcode_profile
 
 # Initialize environment and logging before importing modules that use cv2/matplotlib
-from logging_config import init_environment, set_up_loger
+from logging_config import init_environment, set_up_logger
+
+from profile_setup import standard_profile, wallet_profile, giftbox_profile
 
 import defines
 
@@ -81,11 +84,7 @@ class Worker(QObject):
         try:
             #voeg if statement toe of hij done of error moet sturen!!!!!!!!!!!!!!!!!!!!!!!
             # 0 is error situatie, 1 is normale situatie
-            if self.klaarSituatie == 0:
-                self.net_client.send_client("Error")
 
-            elif self.klaarSituatie == 1:
-                self.net_client.send_client("Done")
             self.net_client.clear_queue()
             self.klaarSituatie = 0
         except Exception as e:
@@ -97,20 +96,33 @@ class Worker(QObject):
 
         # start scanner thread
         scan_thread = threading.Thread(
-            target=self.scanner.run,
+            target= self.scanner.run,
             daemon=True
         )
         scan_thread.start()
+        #self.scanner.run()
         self.clientConnected = self.net_client.is_connected()
+        errorOfDoneGestuurd = False
+
 
         while True:
-            # Handle restart request at top of loop
+
+
+
             if self.restart_flag:
                 self.restart()
                 #self.clientConnected = False
                 continue 
 
             # Wait for a client to connect (non-blocking check)
+            if errorOfDoneGestuurd:
+                if self.klaarSituatie == 0:
+                    self.net_client.send_client("Error")
+
+                elif self.klaarSituatie == 1:
+                    self.net_client.send_client("Done")
+                errorOfDoneGestuurd = False
+
 
             if not self.clientConnected:
                 if self.net_client.is_connected():
@@ -127,7 +139,13 @@ class Worker(QObject):
 
             # start scan (from UI)
             if self.scan_event.is_set():
-                self.scanStart()
+                self.scanButtonPressed()
+
+            #pak alle coordinaten van de excel sheet
+            self.csvReader.selectgiftboxtype(1)
+            self.giftboxCoords = self.csvReader.formatdata(False)
+            self.csvReader.selectwallettype(1)
+            self.walletCoords = self.csvReader.formatdata(True)
             # Start event handling
             if self.start_event.is_set():
                 print("Worker: start geaccepteerd, nu begint de loop!")
@@ -140,6 +158,8 @@ class Worker(QObject):
                 stop_run = False
                 batchCompleted = False
                 total_wallets =  50 #len(self.window.page2.wallet_statusbox)
+                self.scanner.switch_profile(standard_profile)
+                
 
                 # Main processing loop
                 while not batchCompleted:
@@ -148,10 +168,12 @@ class Worker(QObject):
                         print("Worker: restart detected in batch loop, breaking")
                         stop_run = True
                         break
+
                     if self.error_event.is_set() or self.done_event.is_set():
-                        print(f"Worker: error/done event detected at wallet {i}")
+                        print(f"Worker: error/done event detected at wallet {self.indexCurrentWallet}")
                         stop_run = True
                         break
+
 
 
                     if self.indexCurrentWallet > total_wallets:
@@ -227,17 +249,13 @@ class Worker(QObject):
 
 
                     elif current_state == SMNState.DONE_CYCLE:
+                        errorOfDoneGestuurd = True
                         if not self.cycleCompleted():
                             break
-                       
-
                         self.indexCurrentWallet += 1
 
                     elif current_state == SMNState.ERROR:
-                        print("ERROR STATE")
-                        stop_run = True
-                        self.showErrorWindow.emit("Robot heeft error gestuurd", "Proces gestopt door robot <br> Klik op restart om terug te gaan naar het startscherm")
-                        #self.showErrorWindow.emit("Robot heeft error gestuurd", "Proces beëindgid door Robot <br> Klik op restart om terug te gaan naar het startscherm")
+                        self.errorState()
                         break
 
                 # Na batch loop - cleanup
@@ -259,26 +277,45 @@ class Worker(QObject):
             self.start_event.clear
         print("Worker: restart completed, ready for new scan")
         self.indexCurrentWallet = 0
+        self.klaarSituatie = 0
+        self.giftboxValues.clear()
+        self.fouteGiftboxWaardes.clear()
+        self.fouteWalletWaardes.clear()
+        self.giftboxAndWalletCheck = False
         print("restart")
 
     def checkCode(self):
         print("checkcode")
 
-    def scanEvent(self):
-        print("")
+    def errorState(self):
+        print("ERROR STATE")
+        stop_run = True
+        self.showErrorWindow.emit("Robot heeft error gestuurd", "Proces gestopt door robot <br> Klik op restart om terug te gaan naar het startscherm")
+        #self.showErrorWindow.emit("Robot heeft error gestuurd", "Proces beëindgid door Robot <br> Klik op restart om terug te gaan naar het startscherm")
 
 
     def checkBreakInCode(self):
         print("check break in code")
 
-    def scanStart(self):
+    def scanButtonPressed(self):
         self.scanner.switch_profile(giftbox_profile)
+        time.sleep(0.5)
         print("Worker: scan gestart...")
-        resultsGiftboxScanDict = self.scanner.get_code()
+        resultsGiftboxScanDict = None
+        
+        while True:
+            resultsGiftboxScanDict= self.scanner.get_code()
+            if resultsGiftboxScanDict is not None:
+                break
                 
-        if len(resultsGiftboxScanDict) > 47:
+
+        resultsGiftboxScanDict = dict(sorted(resultsGiftboxScanDict.items()))
+        ordered_keys = sorted(resultsGiftboxScanDict.keys())
+        ordered_values = [resultsGiftboxScanDict[k] for k in ordered_keys]    
+        
+        if len(ordered_values) > 47:
             indexCurrentWallet = 1
-            for scanWaarde in resultsGiftboxScanDict.values():
+            for scanWaarde in ordered_values:
                 print(scanWaarde)
                 self.db.bbuffer = scanWaarde
                 checkWaarde = self.db.send_data(SMNState.SCANNING_GIFTBOX)
@@ -290,10 +327,6 @@ class Worker(QObject):
                 self.giftboxValues.append([scanWaarde, checkWaarde])
                 indexCurrentWallet += 1
                         
-            self.csvReader.selectgiftboxtype(1)
-            self.giftboxCoords = self.csvReader.formatdata(False)
-            self.csvReader.selectwallettype(1)
-            self.walletCoords = self.csvReader.formatdata(True)
                         #niet in database gelijk fout in het systeem
                         #self.
         else:
@@ -305,9 +338,8 @@ class Worker(QObject):
         print(self.giftboxValues)
         print(self.giftboxCoords)
         print(self.walletCoords)
-
-
-
+        self.scanner.switch_profile(standard_profile)
+        time.sleep(0.5)
 
 
     def sendCoords(self, typeCoords):
@@ -328,46 +360,67 @@ class Worker(QObject):
             verwerkteVerzendData = [1] + self.walletCoords[self.indexCurrentWallet-1]
             print(verwerkteVerzendData)
             self.net_client.send_client(verwerkteVerzendData)
+            return True
 
     
     def scanGiftbox(self):
         print("SCANNING_GIFTBOX")
-        self.scanner.switch_profile(wallet_profile)
+        #self.scanner.switch_profile(wallet_profile)
         self.net_client.send_client("SCAN_giftbox")
 
     def scanWallet(self):
         print("SCANNING_WALLET")
         self.scanner.switch_profile(wallet_profile)
+        time.sleep(0.2)
+        result = None
+        box_id = None
+        
+        while True:
+            result= self.scanner.get_code()
+            if result is not None:
+                break
 
-        result = self.scanner.get_code()
+        #box_ID = result.values()[0]
+
         for value in result.values():
             print(value)
-            box_ID = value
+            box_id = value
         self.db.bbuffer = self.giftboxValues[self.indexCurrentWallet-1][0]
-        self.db.ibuffer = box_ID #"QH82M-9D5Z-B7X1"
+        self.db.ibuffer = box_id #"QH82M-9D5Z-B7X1"
         checkWaarde = self.db.send_data(SMNState.SCANNING_WALLET)
         self.giftboxAndWalletCheck = checkWaarde
 
-        if checkWaarde:
-            print("true")
-            self.net_client.send_client("true")
-        else:
-            self.net_client.send_client("false")
-            print("false")
+        result = "true" if checkWaarde else "false"
+        self.net_client.send_client(result)
+        print(result)
+        # if checkWaarde:
+        #     print("true")
+        #     self.net_client.send_client("true")
+        # else:
+        #     self.net_client.send_client("false")
+        #     print("false")
         print("scanevent")
+        self.scanner.switch_profile(standard_profile)
+
+        
 
     def cycleCompleted(self):
         print("DONE_CYCLE")
-        self.net_client.send_client("DONECYCLE")
+        #self.net_client.send_client("DONECYCLE")
 
-        if self.giftboxAndWalletCheck:
-            self.update_box_status.emit(self.indexCurrentWallet, "succes")
-        else:
-            self.update_box_status.emit(self.indexCurrentWallet, "unsuccessful")
+        result = "succes" if self.giftboxAndWalletCheck else "unsuccessful"
+        self.update_box_status.emit(self.indexCurrentWallet, result)
+
+        # if self.giftboxAndWalletCheck:
+        #     self.update_box_status.emit(self.indexCurrentWallet, "succes")
+        # else:
+        #     self.update_box_status.emit(self.indexCurrentWallet, "unsuccessful")
 
         if self.restart_flag or self.error_event.is_set() or self.done_event.is_set():
             print(f"Worker: stopping after wallet {self.indexCurrentWallet} status update")
             return False
-        
+
+
+        self.net_client.send_client("Continue")
         return True
 

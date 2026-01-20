@@ -51,7 +51,7 @@ WalletAfter = p[0.25900, -0.72501, 0.14087, 0.003, 2.641, 1.612]
 ip = "192.168.0.43"
 socket_name = "socket1"
 
-
+global failcount = 0
 
 
 
@@ -69,7 +69,29 @@ def get_sigs(coords):
     return coords[-1], coords[1]
 end
 
+sec activate_suction_cup():
+    set_standard_digital_out(0, True)
+end
 
+sec deactivate_suction_cup():
+    set_standard_digital_out(0, False)
+end
+
+sec open_gripper():
+    set_standard_analog_out(0,0)
+end
+
+sec close_gripper_pre_wallet():
+    set_standard_analog_out(0,0.282)
+end
+
+sec close_gripper_box():
+    set_standard_analog_out(0,0.17)
+end
+
+sec close_gripper_full():
+    set_standard_analog_out(0,0.33)
+end
 # Function to move to target
 def moveto_target_coords(coords):
 
@@ -112,11 +134,11 @@ def moveto_target_coords(coords):
     end
 end
 
+
 def moveto_scanner():
-   
-        movej(posscan, a=1.2, v=0.25)
-        scan(coords)
+  movej(posscan, a=1.2, v=0.25)
 end
+
 
 def scan(coords):
   sig, fail = get_sigs(coords)
@@ -130,10 +152,10 @@ def scan(coords):
     socket_send_string(socket_name, "SCAN_WALLET")
     while True:
       correct = socket_read_string(socket_name, timeout=0)
-      if correct == "correct":
+      if correct == "true":
         moveto_opener(failstate=False, sig)
         break
-      elif correct == "incorrect":
+      elif correct == "false":
         moveto_opener(failstate=True, sig)
         break
       else:
@@ -142,11 +164,15 @@ def scan(coords):
         socket_send_string("ERROR", socket_name)
         sleep(1)
         continue
+      end
+    end
+  end
+end
+
      
   
      
-  end
-end
+
     
     
 
@@ -160,7 +186,7 @@ def moveto_opener(failstate=False, sig):
     set_standard_digital_out(2, True)
     if get_standard_analog_out(1) == 0.33:
         set_standard_analog_out(1, 0.0)  # deactivate motor
-    end
+    
 
     
     
@@ -215,8 +241,9 @@ def moveto_opener(failstate=False, sig):
         set_standard_analog_out(1, 0.11)
       end
     end
-        
 end
+        
+
 
 def pickupfinishedbox():
    set_standard_analog_out(1, 0.11)
@@ -238,33 +265,89 @@ def pickupfinishedbox():
    movel(Doospostpickup)
    movel(Doosmidpostpickup)
    set_standard_analog_out(0, 0.0)
-end
+end 
+
+
+def check_error_count():
+    global failcount
+    failcount = failcount + 1
+    return failcount >= 4
+end 
+
 
 def main():
-  socket_open(socket_name, ip, 30002)
-  while True:
-    coords = socket_read_ascii_float(8, socket_name, timeout=0)
-    if coords[0] != 8:
-      popup("Error: Invalid coordinates received", title="Error", error=True)
-      textmsg("Error: Invalid coordinates received")
-      socket_send_string("ERROR", socket_name)
-      sleep(1)
-      continue
-    end
-    sig, _ = get_sigs(coords)
-    moveto_target_coords(coords)
-    
-    if sig == 1:
-      moveto_scanner()
-
-    else:
-      scan(coords)
-    
-    pickupfinishedbox()
   
-  moveto_home() 
-  socket_close(socket_name)
- end
+    socket_open(ip, 12344, socket_name)
+    
+    
+    while True:
+        if socket_read_string(socket_name, timeout=0) != "start":
+          sleep(0.1)
+          continue
+        end
+        socket_send_string("SEND_GIFTBOX_COORDS", socket_name)
+        
+        coords = socket_read_ascii_float(8, socket_name, timeout=0)
+        textmsg("Received coordinates: " + str(coords))
+        if coords[0] != 8:
+          popup("Error: Invalid coordinates received", title="Error", error=True)
+          textmsg("Error: Invalid coordinates received")
+          
+    #       socket_send_string('ERROR', socket_name)
+    #       sleep(1)
+    #       continue
+    #     end
+    #     sig, fail = get_sigs(coords)
+    #     positiion = makepose(coords)
+    #     moveto_target_coords(coords)
+        
+    #     if sig == 0:
+    #       if fail == 1:
+    #         moveto_opener(failstate=False, sig)
+    #       else:
+    #         moveto_opener(failstate=True, sig)
+    #       end
+          
+
+    #     else:
+    #       moveto_scanner()
+    #       socket_send_string(socket_name, 'SCAN_WALLET')
+    #       while True:
+    #         correct = socket_read_string(socket_name, timeout=0)
+    #         if correct == 'true':
+    #           moveto_opener(failstate=False, sig)
+    #           break
+    #         elif correct == 'false':
+    #           moveto_opener(failstate=True, sig)
+    #           break
+    #         else:
+    #           popup('Error: Unknown scan result', title='Error', error=True)
+    #           textmsg('error: unknown scan result')
+    #         end
+    #       end
+    #     end
+
+    #     if fail:
+    #       too_many_errors = check_error_count()
+    #       if too_many_errors:
+    #         popup('Error: Too many failed attempts', title='Error', error=True)
+    #         textmsg('Error: Too many failed attempts')
+    #         socket_send_string('ERROR', socket_name)
+    #         break
+    #       else:
+    #         continue
+    #       end
+    #     end
+        
+
+    #     pickupfinishedbox()
+    #   end
+    # moveto_home() 
+    # socket_close(socket_name)
+    end 
+  
 
 
+
+# --- CALL THE FUNCTION SAFELY ---
 main()

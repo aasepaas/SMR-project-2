@@ -277,7 +277,10 @@ class Page2(QWidget):
                 self.error_event.set()
             if self.done_event:
                 self.done_event.set()  # signaliseer aan worker dat run klaar is
-            self.errorwindow("Er zijn te veel fout gelinkte portemonnees, proces beëindigd","Proces beëindigd<br>Te veel fout gelinkte portemonnees met hun giftbox")
+            if self.isVisible():
+                self.errorwindow("Er zijn te veel fout gelinkte portemonnees, proces beëindigd","Proces beëindigd<br>Te veel fout gelinkte portemonnees met hun giftbox")
+            else:
+                self.errorwindow("Er zijn te veel foute giftboxen in de doos, klik op start om de foute giftboxen te zien", "Proces beëindigd<br>Te veel foute giftboxen die niet voorkomen in de database")
 
     def create_wallets(self, number_of_wallets, per_row=5):
         for lbl in self.wallet_statusbox:
@@ -341,7 +344,7 @@ class Page2(QWidget):
             if self.wrongIndexes.count(index) <= 1:
                 self.errorCount()
 
-        if self.current_Wallet == len(self.wallet_statusbox):
+        if self.current_Wallet == len(self.wallet_statusbox) and self.isVisible():
             self.doneState()
 
     def start_blink(self, index):
@@ -459,25 +462,19 @@ class Page2(QWidget):
 
     def resetSelf(self):
 
-        #self.wrongIndexes.clear()
+        self.wrongIndexes.clear()
         self.wallet_errorcount = 0
+        self.current_Wallet = 0
+
         self.wallet_errorStatus.setText(
            f"<span style='font-size:30px; font-weight:bold;'>Aantal fout:</span><br><br>"
           f"<span style='font-size:22px;'>{self.wallet_errorcount}</div>")
         self.update_status("Inpakken gestart")
 
         self.restartButton.hide()
+        for index in list(self.blink_timers.keys()):
+            self.stop_blink(index)
         self.reset_Wallet_status()
-
-        '''for lbl in self.page2.wallet_statusbox:
-            lbl.setStyleSheet("""
-                background-color: white;
-                border: 1px solid black;
-                color: black;
-                padding: 6px;
-                font-size: 11px;
-                font-weight: bold;
-            """)'''
 
         # Switch page
         self.error_event.clear()
