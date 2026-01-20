@@ -187,64 +187,46 @@ def moveto_home():
 end
 
 def moveto_opener(failstate=False, sig):
-    # Use correct variables
-    set_standard_digital_out(1, True)
-    set_standard_digital_out(2, True)
-    if get_standard_analog_out(1) == 0.33:
-        set_standard_analog_out(1, 0.0)  # deactivate motor
-    
-
-    
-    
-    if failstate:
-          set_standard_analog_out(0, 0.33)
-          movej(failurepos, a=1.2, v=0.5)
-          movej(set_pose_z(failurepos, lowerzwallet))
-          set_standard_analog_out(0, 0.2)
-          movej(set_pose_z(failurepos, raisezwallet))
-          movej(subboxpos1, a=1.2, v=0.5)
-          movej(set_pose_z(subboxpos1, lowerzwallet))
-          set_standard_digital_out(0, True)
-          movej(set_pose_z(subboxpos1, raisezwallet))
-          movej(failurepos, a=1.2, v=0.5)
-          movej(set_pose_z(failurepos, lowerzwallet))
-          set_standard_digital_out(0, False)
-          movej(set_pose_z(failurepos, raisezwallet))
-
+   if sig == 1:
+       if fail == 1:
+           movej(postposscan)
+           movel(walletplacing1)
+           set_standard_analog_out(0, 0.0)
+           sleep(0.2)
+           movel(postwalletplacing)
+           set_standard_analog_out(1, 0.23) 
+           sleep(1)
+           set_standard_digital_out(2, False)
+           sleep(0.1)
+           set_standard_digital_out(1, False)
+           set_standard_analog_out(1, 0.0) 
+           set_standard_analog_out(0, 0.25)
+       else:
+           movej(failpos)
+           set_standard_analog_out(0, 0.0)
+       end
     else:
-      if sig == 1:
-        movel(WalletPrePlacingHigh)
-        sleep(0.01)
-        movel(WalletPrePlacingMedium)
-        sleep(0.01)
-        movel(WalletPrePlacingLow)
-        sleep(0.01)
-        movel(WalletPlacing)
-        sleep(0.01)
-        set_standard_analog_out(0, 0.289)
-        sleep(0.5)
-        movel(WalletPostPlacing)
-        sleep(0.01)
-        movel(WalletPostPlacingBack)
-        sleep(0.01)
-        movel(WalletPushingAfterPlacing)
-        sleep(0.01)
-        movel(WalletAfter)
-
-      else:
+    
+        if failstate:
+              set_standard_analog_out(0, 0.33)
+              movej(fail, a=1.2, v=0.5)
+              movej(set_pose_z(failurepos, lowerzwallet))
+              set_standard_analog_out(0, 0.2)
+              movej(set_pose_z(failurepos, raisezwallet))
+        else:
         
-        movej(DoosBovenMoldHoog)
-        sleep(0.01)
-        movel(set_pose_z(DoosBovenMoldHoog, DoosBovenMoldMiddenz))
-        sleep(0.01)
-        movel(set_pose_z(DoosBovenMoldMidden, DoosBovenMoldz))
-        sleep(0.02)
-        set_standard_analog_out(0, 0.27)
-        sleep(1.2)
-        movel(NaDoosPlaatsing)
-        sleep(0.1)
-        movel(NaDoosPlaatsingHoog)
-        set_standard_analog_out(1, 0.11)
+            movej(DoosBovenMoldHoog)
+            sleep(0.01)
+            movel(set_pose_z(DoosBovenMoldHoog, DoosBovenMoldMiddenz))
+            sleep(0.01)
+            movel(set_pose_z(DoosBovenMoldMidden, DoosBovenMoldz))
+            sleep(0.02)
+            set_standard_analog_out(0, 0.27)
+            sleep(1.2)
+            movel(NaDoosPlaatsing)
+            sleep(0.1)
+            movel(NaDoosPlaatsingHoog)
+            set_standard_analog_out(1, 0.11)
       end
     end
 end
