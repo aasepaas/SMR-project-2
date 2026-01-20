@@ -2,6 +2,7 @@ import time
 import cv2
 from cv2.typing import MatLike
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from DBSCANFiltering import DBSCANFiltering
 from feed import resize_frame
@@ -142,6 +143,7 @@ class ROIAutoDetector:
         if self.debug_process:
             cv2.imshow("NormalBlur (5, 5)", resize_frame(blur)) 
         return blur
+
     #@processframe_timer_func
     def apply_Threshold(self, frame, threshold_value: int, index: int = 0):
         """Apply binary thresholding to the image."""
@@ -187,27 +189,22 @@ class ROIAutoDetector:
         return frame
 
     def show_debug_frames(self):
-        img_threshold = np.hstack([self.imgstore_thresholds[key] for key in self.imgstore_thresholds])
-        img_threshold = cv2.putText(img_threshold, "Threshold", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255), 2, cv2.LINE_AA)
-        cv2.imshow("Preprocessed Frame - Thresholds", resize_frame(img_threshold, scale=1*self.scaling_factor, old_width=img_threshold.shape[1], old_height=img_threshold.shape[0]))
-        img_rough = np.hstack([self.imgstore_rough_filter[key] for key in self.imgstore_rough_filter])
-        img_rough = cv2.putText(img_rough, "Rough filter", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255), 2, cv2.LINE_AA)
-        cv2.imshow("Preprocessed Frame - Rough filter", resize_frame(img_rough, scale=1*self.scaling_factor, old_width=img_rough.shape[1], old_height=img_rough.shape[0]))
-        img_bounding = np.hstack([self.imgstore_bounding_rect[key] for key in self.imgstore_bounding_rect])
-        img_bounding = cv2.putText(img_bounding, "Bounding Rect", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255), 2, cv2.LINE_AA)
-        cv2.imshow("Preprocessed Frame - Bounding Rectangles", resize_frame(img_bounding, scale=1*self.scaling_factor, old_width=img_bounding.shape[1], old_height=img_bounding.shape[0]))
-        img_fine = np.hstack([self.imgstore_fine_filter[key] for key in self.imgstore_fine_filter])
-        img_fine = cv2.putText(img_fine, "Fine filter", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255), 2, cv2.LINE_AA)
-        cv2.imshow("Preprocessed Frame - Fine filter", resize_frame(img_fine, scale=1*self.scaling_factor, old_width=img_fine.shape[1], old_height=img_fine.shape[0]))
-        if self.imgstore_centers:
-            img_centers = np.hstack([self.imgstore_centers[key] for key in self.imgstore_centers])
-            img_centers = cv2.putText(img_centers, "Centers", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255), 2, cv2.LINE_AA)
-            cv2.imshow("Preprocessed Frame - Centers", resize_frame(img_centers, scale=1*self.scaling_factor, old_width=img_centers.shape[1], old_height=img_centers.shape[0]))
-        
-        # stacked = np.hstack([img_threshold, img_rough, img_bounding, img_fine, img_centers])
-        # cv2.imshow("Preprocessed Frame Final", resize_frame(stacked, scale=1, old_width=stacked.shape[1], old_height=stacked.shape[0]))    
+        stored_images = [
+            (self.imgstore_thresholds, "Threshold"),
+            (self.imgstore_rough_filter, "Rough filter"),
+            (self.imgstore_bounding_rect, "Bounding Rect"),
+            (self.imgstore_fine_filter, "Fine filter"),
+            (self.imgstore_centers, "Centers"),
+        ]
+
+        for store, label in stored_images:
+            if not store:
+                continue
+            img = np.hstack([store[key] for key in store])
+            img = cv2.putText(img, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255), 2, cv2.LINE_AA)
+            cv2.imshow(f"Preprocessed Frame - {label}", resize_frame(img, scale=1*self.scaling_factor, old_width=img.shape[1], old_height=img.shape[0]))
     
-    #@processframe_timer_func
+    @timer_func
     def __preprocess_frame(self, frame):
         """Preprocess frame for better contour detection."""
         # Mogelijkheid 1: thresh_value =  172 
@@ -220,28 +217,28 @@ class ROIAutoDetector:
         steps = 5
 
         resized_frame = cv2.resize(frame, fx=1/self.scaling_factor, fy=1/self.scaling_factor, 
-                           dsize=None, interpolation=cv2.INTER_LINEAR_EXACT)
+                        dsize=None, interpolation=cv2.INTER_LINEAR_EXACT)
         gray = self.apply_gray(resized_frame)
-        if 121 + margin > start_threshold_value > 121 - margin:
+        if 121 - margin < start_threshold_value < 121 + margin:
             input_frame = self.apply_NormalBlur(gray)
         else: 
             Gaussianblur = self.apply_GaussianBlur(gray)
             input_frame = self.apply_CLAHE(Gaussianblur)
 
-        def make_slices(frame, amount_of_slices: int = 7, slice_margin_y: int = 50, slice_margin_x: int = 0) -> list[tuple[MatLike, int, int]]:
+        def make_slices(frame, amount_of_slices: int = 7, slice_margin_y: int = 0, slice_margin_x: int = 0) -> list[tuple[MatLike, int, int]]:
             if amount_of_slices == 1:
                 return [(frame, 0, 0)]
             width, height = int(frame.shape[1]/amount_of_slices), int(frame.shape[0])
             
             slices_with_offset = []
-            for i in range (1, amount_of_slices-1):
+            for i in range(1, amount_of_slices - 1):
                 ymin, ymax, xmin, xmax = 0+slice_margin_y, height-slice_margin_y, width*i+slice_margin_x, width*(i+1)-slice_margin_x
-                frame = cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0,0,255), 3)
-                slices_with_offset.append((frame[ymin:ymax, xmin:xmax], xmin, ymin)) # top:bottom, left:right] 
+                frame = cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 0, 255), 3)
+                slices_with_offset.append((frame[ymin:ymax, xmin:xmax], xmin, ymin))
             
-            if self.debug_process: 
+            if self.debug_process:
                 display_imgs = [s[0] for s in slices_with_offset]
-                cv2.imshow("Preprocessed Frame", resize_frame(np.hstack(display_imgs), scale=0.3, old_width=frame.shape[1], old_height=frame.shape[0]))            
+                cv2.imshow("Preprocessed Frame", resize_frame(np.hstack(display_imgs), scale=0.5, old_width=frame.shape[1], old_height=frame.shape[0]))            
             return slices_with_offset
         
         def adjust_roi_coordinates(rois: list[tuple[int,int,int,int]], x_offset: int, y_offset: int) -> list[tuple[int,int,int,int]]:
@@ -249,16 +246,14 @@ class ROIAutoDetector:
             adjusted_rois = []
             for top, bottom, left, right in rois:
                 adjusted_rois.append((
-                    top     + y_offset * self.scaling_factor,
-                    bottom  + y_offset * self.scaling_factor,
-                    left    + x_offset * self.scaling_factor,
-                    right   + x_offset * self.scaling_factor
+                    top  + y_offset * self.scaling_factor, bottom + y_offset * self.scaling_factor,
+                    left + x_offset * self.scaling_factor, right  + x_offset * self.scaling_factor
                 ))
             return adjusted_rois
         
         def attempt_detection(frame: MatLike, threshold_value: int, index: int) -> tuple[list[tuple[int,int,int,int]], bool]:
             """Attempt ROI detection with given threshold value."""
-            logger.info(f"Attempting with {threshold_value = }")
+            # logger.info(f"Slice {index + 1}: Attempting with threshold={threshold_value}")
             thresholded_image        = self.apply_Threshold(frame, threshold_value, index=index)
             rough_filter             = self.apply_RoughFiltering(thresholded_image, index=index)
             bounding_rect            = self.apply_BoundingRectangles(rough_filter, index=index)
@@ -266,69 +261,88 @@ class ROIAutoDetector:
             if len(boxes_local) == 0: 
                 return [], False # No boxes found don't continue the loop further
             rois_local                  = self.retreive_rois(boxes_local, fine_filter, index=index)
-            logger.info(f"Detected {len(rois_local)} ROIs with threshold {threshold_value}.")
+            logger.info(f"Slice {index + 1}: Detected {len(rois_local)} ROIs with threshold {threshold_value}.")
             return rois_local, True
 
-        def search_threshold_range(frame: MatLike, start: int, end: int, step: int, direction: str, slice_idx=0, expected_rois_per_slice=10) -> list[tuple[int,int,int,int]] | None:
-            """Search for ROIs in threshold range. Returns ROIs if found, None otherwise."""
-            logger.info(f"Starting {direction} search from {start} to {end} (step={step})")
+        def search_threshold_range(frame: MatLike, start: int, end: int, step: int, direction: str, slice_idx: int, expected_rois_per_slice: int) -> list[tuple[int,int,int,int]] | None:
+            """Search for ROIs in threshold range."""
+            logger.info(f"Slice {slice_idx + 1}: Starting {direction} search from {start} to {end} (step={step})")
             for threshold in range(start, end, step):
                 rois, success = attempt_detection(frame, threshold, index=slice_idx)
                 if not success:
-                    logger.critical(f"No boxes found at threshold {threshold}, stopping {direction} search")
-                    break 
+                    logger.critical(f"Slice {slice_idx + 1}: No boxes found at threshold {threshold}, stopping {direction} search")
+                    break
                 if len(rois) == expected_rois_per_slice:
-                    logger.approved(f"Slice: {slice_idx + 1} Found {len(rois)} ROIs at threshold {threshold} ({direction}).") # type: ignore (logger.approved not in Logger by default)
+                    logger.approved(f"Slice {slice_idx + 1}: Found {len(rois)} ROIs at threshold {threshold} ({direction}).") # type: ignore (logger.approved not in Logger by default)
                     return rois
             return None
         
-        # Process slices
-        slices_with_offsets = make_slices(input_frame, amount_of_slices=7)
-        expected_rois_per_slice = self.expected_n_rois // (len(slices_with_offsets))
-        print(f"Expected ROIs per slice: {expected_rois_per_slice}")
-        all_rois = []
-        for slice_idx, (slice_img, x_offset, y_offset) in enumerate(slices_with_offsets):
-            logger.info(f"Processing slice {slice_idx + 1}/{len(slices_with_offsets)}")
+        def process_single_slice(slice_data: tuple) -> tuple[int, list[tuple[int,int,int,int]]]:
+            """Process a single slice and return (slice_idx, adjusted_rois)."""
+            slice_idx, slice_img, x_offset, y_offset, expected_rois_per_slice = slice_data
+            # logger.info(f"Slice {slice_idx + 1}: Starting processing")
             
             # Try initial threshold
             rois, _ = attempt_detection(slice_img, start_threshold_value, index=slice_idx)
             if len(rois) == expected_rois_per_slice:
-                logger.approved(f"Slice: {slice_idx + 1} Found {len(rois)} ROIs at initial threshold {start_threshold_value}") # type: ignore (logger.approved not in Logger by default)
-                all_rois.extend(adjust_roi_coordinates(rois, x_offset, y_offset))
-                continue 
+                logger.approved(f"Slice {slice_idx + 1}: Found {len(rois)} ROIs at initial threshold {start_threshold_value}") # type: ignore (logger.approved not in Logger by default)
+                return slice_idx, adjust_roi_coordinates(rois, x_offset, y_offset)
             
             # Search upward
             max_threshold = min(255, start_threshold_value + margin) # Can't go above 255
             rois = search_threshold_range(slice_img, start_threshold_value + steps, max_threshold + 1, steps, "upward", slice_idx=slice_idx, expected_rois_per_slice=expected_rois_per_slice)
             if rois and len(rois) == expected_rois_per_slice:
-                all_rois.extend(adjust_roi_coordinates(rois, x_offset, y_offset))
-                continue
-
+                return slice_idx, adjust_roi_coordinates(rois, x_offset, y_offset)
+            
             # Search downward
             min_threshold = max(0, start_threshold_value - margin) # Can't go below 0
             rois = search_threshold_range(slice_img, start_threshold_value - steps, min_threshold - 1, -steps, "downward", slice_idx=slice_idx, expected_rois_per_slice=expected_rois_per_slice)
             if rois and len(rois) == expected_rois_per_slice:
-                all_rois.extend(adjust_roi_coordinates(rois, x_offset, y_offset))
-                continue           # Then search downwards
+                return slice_idx, adjust_roi_coordinates(rois, x_offset, y_offset)
             
-            # Fallback: use whatever was found
+            # Fallback
             if rois:
                 logger.warning(f"Slice {slice_idx + 1}: Found {len(rois)} ROIs, expected {expected_rois_per_slice}")
-                all_rois.extend(adjust_roi_coordinates(rois, x_offset, y_offset))
+                return slice_idx, adjust_roi_coordinates(rois, x_offset, y_offset)
             else:
                 rois, _ = attempt_detection(slice_img, start_threshold_value, index=slice_idx)
-                logger.critical(f"Slice {slice_idx + 1}: Could not find expected ROIs. Using {len(rois)} from initial threshold")
-                all_rois.extend(adjust_roi_coordinates(rois, x_offset, y_offset))
-    
+                logger.critical(f"Slice {slice_idx + 1}: Could not find expected ROIs. Using {len(rois)} ROIs from initial threshold {start_threshold_value} as fallback.")
+                return slice_idx, adjust_roi_coordinates(rois, x_offset, y_offset)
+        
+        # Process slices
+        slices_with_offsets = make_slices(input_frame, amount_of_slices=7)
+        expected_rois_per_slice = self.expected_n_rois // len(slices_with_offsets)
+        logger.info(f"Expecting ROIs per slice: {expected_rois_per_slice}")
+        
+        # Prepare slice data for threading
+        slice_tasks = [
+            (idx, slice_img, x_offset, y_offset, expected_rois_per_slice)
+            for idx, (slice_img, x_offset, y_offset) in enumerate(slices_with_offsets)
+        ]
+        
+        # Process slices in parallel
+        all_rois_dict = {}
+        with ThreadPoolExecutor(max_workers=min(len(slice_tasks), 2)) as executor:
+            futures = {executor.submit(process_single_slice, task): task[0] for task in slice_tasks}
+            
+            for future in as_completed(futures):
+                slice_idx, rois = future.result()
+                all_rois_dict[slice_idx] = rois
+                logger.info(f"Slice {slice_idx + 1}: Completed with {len(rois)} ROIs")
+        
+        # Combine results in correct order
+        all_rois = []
+        for idx in sorted(all_rois_dict.keys()):
+            all_rois.extend(all_rois_dict[idx])
+        
         if self.debug_process:
             self.show_debug_frames()
         
         # Final results
-        # print(f"Total ROIs detected: {len(all_rois)}: {[r for r in all_rois]}")
         if len(all_rois) == self.expected_n_rois:
-            logger.warning(f"Detected ROIs ({len(all_rois)}) expected ({self.expected_n_rois}).")
+            logger.warning(f"Successfully detected {len(all_rois)} ROIs (expected: {self.expected_n_rois})")
         else:
-            logger.critical(f"Could not detect expected number of ROIs ({self.expected_n_rois}). Detected {len(all_rois)} ROIs.")
+            logger.critical(f"ROI count mismatch: detected {len(all_rois)}, expected {self.expected_n_rois}")
         
         return all_rois
 
@@ -512,7 +526,7 @@ class ROIAutoDetector:
 if __name__ == "__main__":
     from feed import LiveFeed, VideoFeed
 
-    camera_index = 0
+    camera_index = 1
     # feed = LiveFeed(name="Test Feed", active=True, camera_index=camera_index)
     feed = VideoFeed(name="Recorded Video 2 (Camera 4K Webcam)", active=True, camera_index=camera_index,
                      file_name="Jasmijn_code/videos/test_mjpg_1.avi", loop=True)
@@ -520,7 +534,7 @@ if __name__ == "__main__":
     
     detector1 = ROIAutoDetector(
         expected_n_rois=50,
-        threadhold_value=121-10,
+        threadhold_value=171, # Aashish 182 -> Video 121 of 172
         scaling_factor=2,
     )
     results = {}
@@ -532,7 +546,7 @@ if __name__ == "__main__":
             
             if results == {}: 
                 print("In capture loop, waiting for user input...")
-                results = detector1.capture_loop(frame, automatic=True)
+                results = detector1.capture_loop(frame, automatic=False)
             elif results != {}:
                 print(f"{len(results)} ROI's detected, exiting capture loop.")
                 break

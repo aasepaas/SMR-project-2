@@ -70,6 +70,9 @@ class VideoFeed(Feed):
         # wait_time = int(1000 / fps) if fps > 0 else 30
         if self.cap.isOpened():
             logger.info(f"Opened video file '{self.file_name}'")
+        else:
+            logger.error(f"Cannot open video file '{self.file_name}'")
+            raise ValueError(f"Cannot open video file '{self.file_name}'")
         
     def __del__(self):
         """ Safely release capture. """

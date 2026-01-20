@@ -263,7 +263,7 @@ class CameraScanner:
                 rois = self.__retrieve_rois(frame)
                 if rois:
                     self.rois = rois
-                    self.profile_switch_time = time.perf_counter()
+                    # self.profile_switch_time = time.perf_counter()
                 else:
                     continue
                      
@@ -322,11 +322,11 @@ class CameraScanner:
                       
         # No longer running                
         logger.info("CameraScanner.run exiting")
-        print(f"Number of detected codes: {len(self.persistent_results)} / {len(self.rois)}")
-        self.persistent_results = dict(sorted(self.persistent_results.items()))
-        if len(self.persistent_results) > 0:
-            for i in range(1, len(self.rois) + 1):
-                print(f"ROI {i:>2}: {self.persistent_results.get(i, '<no code>')}")
+        # print(f"Number of detected codes: {len(self.persistent_results)} / {len(self.rois)}")
+        # self.persistent_results = dict(sorted(self.persistent_results.items()))
+        # if len(self.persistent_results) > 0:
+        #     for i in range(1, len(self.rois) + 1):
+        #         print(f"ROI {i:>2}: {self.persistent_results.get(i, '<no code>')}")
         
     def __show_frame(self, frame) -> None:
         """Display the current frame with scaling."""
@@ -375,10 +375,10 @@ class CameraScanner:
         
         # Ensure rois uses the same concrete mapping type as during initialization
         self.rois: dict[int, tuple[int, int, int, int]] = self.profile.rois
-        self.profile_switch_time = time.perf_counter()
         self.timeout_reached = False
         self.detected_all = False
         self.codes_retrieved = False
+        self.profile_switch_time = time.perf_counter()
 
     @staticmethod
     def __log_profile_settings(profile) -> None: 

@@ -12,6 +12,8 @@ from profile_setup import standard_profile, wallet_profile, giftbox_profile
 
 # Initialize environment and logging before importing modules that use cv2/matplotlib
 from logging_config import set_up_logger
+import logging
+logger = logging.getLogger()
 set_up_logger()
 
 def threaded_key_profile_switcher(scanner: CameraScanner):
@@ -98,14 +100,18 @@ def main():
         (wallet_profile,   False, False, True, "Jasmijn_code/videos/wallet_test_mjpg_1.avi"), 
     ]
 
-    Feeds = []    
-    for profile_instance, use_live_flag, first_active_flag, loop_flag, video_path in profiles:
-        if use_live_flag:
-            print(f"Using LIVE feed for profile '{profile_instance.name}' (Camera index {profile_instance.camera_index})")
-            Feeds.append(LiveFeed(f"Camera {profile_instance.name}", first_active_flag, profile_instance.camera_index))
-        else:
-            print(f"Using RECORDED VIDEO for profile '{profile_instance.name}' (Camera index {profile_instance.camera_index}) from file: {video_path}")
-            Feeds.append(VideoFeed(f"Recorded Video {profile_instance.name}", first_active_flag, video_path, profile_instance.camera_index, loop=loop_flag))
+    try: 
+        Feeds = []    
+        for profile_instance, use_live_flag, first_active_flag, loop_flag, video_path in profiles:
+            if use_live_flag:
+                print(f"Using LIVE feed for profile '{profile_instance.name}' (Camera index {profile_instance.camera_index})")
+                Feeds.append(LiveFeed(f"Camera {profile_instance.name}", first_active_flag, profile_instance.camera_index))
+            else:
+                print(f"Using RECORDED VIDEO for profile '{profile_instance.name}' (Camera index {profile_instance.camera_index}) from file: {video_path}")
+                Feeds.append(VideoFeed(f"Recorded Video {profile_instance.name}", first_active_flag, video_path, profile_instance.camera_index, loop=loop_flag))
+    except ValueError:
+        logger.critical("Error setting up feeds. Try another path or camera index.")
+        return
     
     feed_list = sorted(Feeds, key=lambda f: f.camera_index)
     print("Sorting feed_list in order of ascending camera index:")
@@ -116,7 +122,7 @@ def main():
     matrix_decoder = DataMatrixDecoder(use_threads=True, num_threads=16)
     roi_detector = ROIAutoDetector(
         expected_n_rois=50,
-        threadhold_value=121-10,
+        threadhold_value=111,
         scaling_factor=2,
     )
 
