@@ -114,15 +114,15 @@ class CameraScanner:
         rows = min(10, max(1, math.ceil(total / cols)))
         
         # Determine cell size
-        if rois_input is not None:
-            target_w, target_h = self._get_size_from_images(rois_input)
-        elif frame is not None:
-            first_roi = next(iter(self.rois.values()))
-            top, bottom, left, right = self.__roi_box_size(frame.shape[0], frame.shape[1], first_roi)
-            target_w, target_h = right - left, bottom - top
-        else: 
-            return
-        
+        # if rois_input is not None:
+        #     target_w, target_h = self._get_size_from_images(rois_input)
+        # elif frame is not None:
+        #     first_roi = next(iter(self.rois.values()))
+        #     top, bottom, left, right = self.__roi_box_size(frame.shape[0], frame.shape[1], first_roi)
+        #     target_w, target_h = right - left, bottom - top
+        # else: 
+        #     return
+        target_w, target_h = 100, 100 # Fixed size for equal sizes
         # Create canvas
         canvas = np.zeros((rows * target_h, cols * target_w, 3), dtype=np.uint8)
         
@@ -167,7 +167,7 @@ class CameraScanner:
             cv2.rectangle(canvas, (x_start+1, y_start+1), (x_end-1, y_end-1), color, 2)
         
         cv2.imshow(window_name, canvas)
-        cv2.waitKey(1)
+        # cv2.waitKey(0) # Uncomment to pause until a keypress (to take screenshot)
 
     def _get_size_from_images(self, rois_input=None):
         """Get cell size from provided images."""
@@ -288,7 +288,7 @@ class CameraScanner:
 
             # Display frames - Before we have results (to show ROI's)
             if self.DEBUG_show_images:
-                self.__show_all_rois(frame=frame, display_vertical=True, window_name = "show_normal_grid")
+                self.__show_all_rois(frame=frame, display_vertical=True, window_name = "Unprocessed ROIs")
                 self.__show_frame(frame)   
                       
             # Wrap the processing in a broad exception catcher so unexpected errors get logged instead of silently terminating the thread.
@@ -316,8 +316,8 @@ class CameraScanner:
                                       
             # Display frames - When we have results
             if self.DEBUG_show_images:
-                self.__show_all_rois(frame=frame, display_vertical=True, window_name = "show_normal_grid")
-                self.__show_all_rois(rois_input=ROIs_to_send_decoder,  window_name = "show_decoder_grid")
+                self.__show_all_rois(frame=frame, display_vertical=True, window_name = "Unprocessed ROIs")
+                self.__show_all_rois(rois_input=ROIs_to_send_decoder,  window_name = "ROIs sent to decoder")
                 self.__show_frame(frame)         
                       
         # No longer running                

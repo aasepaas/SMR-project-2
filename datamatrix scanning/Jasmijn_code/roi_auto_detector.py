@@ -62,30 +62,43 @@ class ROIAutoDetector:
         self.imgstore_centers = {}
         
     @staticmethod
+    @timer_func
     def __connected_components_filtering(frame: MatLike, Min_area=100, Max_area=500_000, squareness=10, connect=8):
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(frame, connectivity=connect)
-
-        full_mask = np.zeros(labels.shape, dtype="uint8")
-        points = []
-
-        for label in range (1, num_labels):
-            area = stats[label, cv2.CC_STAT_AREA]
-            # msg = f"Fijne filter area: {area}" if squareness == 1 else f"Groffe filter area: {area}"
-            # print(msg)
-            
-            # Verwijder kleine ruis
-            if area >= Max_area or area <= Min_area: 
-                continue
-            
-            # Verwijder data niet vierkant genoeg 
-            if abs(stats[label, cv2.CC_STAT_WIDTH] - stats[label, cv2.CC_STAT_HEIGHT]) > squareness: 
-                continue
-
-            x, y, w, h = stats[label, cv2.CC_STAT_LEFT], stats[label, cv2.CC_STAT_TOP], stats[label, cv2.CC_STAT_WIDTH], stats[label, cv2.CC_STAT_HEIGHT]           
-            points.append((x, y, w, h))
-            full_mask[labels == label] = 255
-                        
-        return full_mask, points  
+        
+        if num_labels <= 1:  # Early exit if no components
+            return np.zeros(labels.shape, dtype="uint8"), []
+        
+        # Vectorized filtering instead of loop (O(n) -> O(1) operation)
+        areas = stats[1:, cv2.CC_STAT_AREA] # Skip background (label 0)
+        widths = stats[1:, cv2.CC_STAT_WIDTH]
+        heights = stats[1:, cv2.CC_STAT_HEIGHT]
+        
+        # Boolean mask for valid components
+        valid_mask = (
+            (areas >= Min_area) & # Filter to small areas
+            (areas < Max_area) &  # Filter to large areas
+            (np.abs(widths - heights) <= squareness) # Filter to squareness
+        )
+        
+        valid_labels = np.where(valid_mask)[0] + 1  # +1 because we skipped label 0
+        
+        if len(valid_labels) == 0:
+            return np.zeros(labels.shape, dtype="uint8"), []
+        
+        # Create mask using vectorized operations
+        full_mask = np.isin(labels, valid_labels).astype(np.uint8) * 255
+        
+        # Extract boxes for valid components
+        points = [
+            (stats[label, cv2.CC_STAT_LEFT], 
+            stats[label, cv2.CC_STAT_TOP],
+            stats[label, cv2.CC_STAT_WIDTH], 
+            stats[label, cv2.CC_STAT_HEIGHT])
+            for label in valid_labels
+        ]
+        
+        return full_mask, points
 
     @staticmethod
     def test_threshold_values(frame) -> int:
@@ -224,21 +237,24 @@ class ROIAutoDetector:
         else: 
             Gaussianblur = self.apply_GaussianBlur(gray)
             input_frame = self.apply_CLAHE(Gaussianblur)
-
+        
+        @timer_func
         def make_slices(frame, amount_of_slices: int = 7, slice_margin_y: int = 0, slice_margin_x: int = 0) -> list[tuple[MatLike, int, int]]:
             if amount_of_slices == 1:
                 return [(frame, 0, 0)]
             width, height = int(frame.shape[1]/amount_of_slices), int(frame.shape[0])
-            
             slices_with_offset = []
             for i in range(1, amount_of_slices - 1):
-                ymin, ymax, xmin, xmax = 0+slice_margin_y, height-slice_margin_y, width*i+slice_margin_x, width*(i+1)-slice_margin_x
-                frame = cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 0, 255), 3)
+                xmin, xmax, ymin, ymax = width * i + slice_margin_x, width * (i + 1) - slice_margin_x, slice_margin_y, height - slice_margin_y                
+    
                 slices_with_offset.append((frame[ymin:ymax, xmin:xmax], xmin, ymin))
             
-            if self.debug_process:
-                display_imgs = [s[0] for s in slices_with_offset]
-                cv2.imshow("Preprocessed Frame", resize_frame(np.hstack(display_imgs), scale=0.5, old_width=frame.shape[1], old_height=frame.shape[0]))            
+            if self.debug_process: # Only create debug visualization if needed
+                debug_frame = cv2.cvtColor(frame.copy(), cv2.COLOR_GRAY2BGR)
+                for _, x, y in slices_with_offset:
+                    cv2.rectangle(debug_frame, (x, y), (x + width, height - slice_margin_y), (0, 0, 255), 3)
+                cv2.imshow("Preprocessed Frame", resize_frame(debug_frame, scale=0.5, old_width=frame.shape[1], old_height=frame.shape[0]))            
+            
             return slices_with_offset
         
         def adjust_roi_coordinates(rois: list[tuple[int,int,int,int]], x_offset: int, y_offset: int) -> list[tuple[int,int,int,int]]:
@@ -263,7 +279,7 @@ class ROIAutoDetector:
             rois_local                  = self.retreive_rois(boxes_local, fine_filter, index=index)
             logger.info(f"Slice {index + 1}: Detected {len(rois_local)} ROIs with threshold {threshold_value}.")
             return rois_local, True
-
+        
         def search_threshold_range(frame: MatLike, start: int, end: int, step: int, direction: str, slice_idx: int, expected_rois_per_slice: int) -> list[tuple[int,int,int,int]] | None:
             """Search for ROIs in threshold range."""
             logger.info(f"Slice {slice_idx + 1}: Starting {direction} search from {start} to {end} (step={step})")
@@ -457,14 +473,14 @@ class ROIAutoDetector:
             cv2.putText(frame, f"ROI {idx}", (left, top - 5), cv2.FONT_HERSHEY_SIMPLEX, float(1*frame_scale), (0, 255, 0), int(2*frame_scale))
         
         return frame
-      
+    
+    @timer_func  
     def __recalculate_rois(self, frame):
         """Herbereken ROI's op basis van het huidige frame."""
-        print("\nHerberekenen van ROI's...")
+        logger.info("Herberekenen van ROI's...")
         rois_list = self.__preprocess_frame(frame)
         rois_dict = self.__sort_rois_column_major(rois_list)
         detected_frame = self.__draw_rois_on_frame(frame, rois_dict, frame_scale=self.frame_scale)
-        print(f">>> {len(rois_list)} ROI's gedetecteerd\n")
         
         return detected_frame, rois_dict
 

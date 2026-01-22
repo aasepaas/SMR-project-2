@@ -131,6 +131,7 @@ def main():
     
     print("="*50)
     print("   CONTROLS: ")
+    print("   0 = Standard profile")
     print("   1 = Wallet profile")
     print("   2 = Giftbox profile")
     print("   ESC = Quit")
