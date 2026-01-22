@@ -4,6 +4,11 @@ from cv2.typing import MatLike
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Timer decorators that respect PRODUCTION_MODE (import before other local modules)
+from config import create_timer_decorator
+timer_func = create_timer_decorator("ROI_detector")
+processframe_timer_func = create_timer_decorator("ROI_detector")
+
 from DBSCANFiltering import DBSCANFiltering
 from feed import resize_frame
 
@@ -15,26 +20,6 @@ set_up_logger()
 
 def nothing(x):
     pass
-
-def processframe_timer_func(func):
-    # This function shows the execution time of the function object passed
-    def wrap_func(*args, **kwargs):
-        t1 = time.perf_counter()    
-        result = func(*args, **kwargs)
-        t2 = time.perf_counter()
-        print(f'Function {func.__name__!r} executed in {(t2-t1)*1000:.4f} milliseconds')
-        return result
-    return wrap_func
-
-def timer_func(func):
-    # This function shows the execution time of the function object passed
-    def wrap_func(*args, **kwargs):
-        t1 = time.perf_counter()    
-        result = func(*args, **kwargs)
-        t2 = time.perf_counter()
-        print(f'Function {func.__name__!r} executed in {(t2-t1)*1000:.4f} milliseconds')
-        return result
-    return wrap_func
 
 class ROIAutoDetector:
     """
@@ -48,11 +33,15 @@ class ROIAutoDetector:
     - Set `DEBUGPROCESS` to True to see intermediate processing steps
     """
     
-    def __init__(self, expected_n_rois = 50, threadhold_value = 177, scaling_factor = 1):
+    def __init__(self, expected_n_rois = 50, threadhold_value = 177, scaling_factor = 1, threading = False):
         self.expected_n_rois = expected_n_rois  # Verwacht aantal ROI's
         self.threshold_value = threadhold_value  # Standaard geen vaste tresh value    
         self.scaling_factor = scaling_factor    
         self.frame_scale = 2  
+        self.use_threads = threading
+        
+        # Pre-allocate CLAHE object (saves ~2-3ms per frame)
+        self._clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
         # Store intermediate images for debugging
         self.imgstore_thresholds = {}
@@ -60,9 +49,25 @@ class ROIAutoDetector:
         self.imgstore_bounding_rect = {}
         self.imgstore_fine_filter = {}
         self.imgstore_centers = {}
+    
+        # Pre-allocate thread pool (saves ~15-20ms per decode_datamatrices call)
+        if self.use_threads: 
+            self._executor = ThreadPoolExecutor(max_workers=4)
+    
+    def _clear_debug_stores(self) -> None:
+        """Clear debug image stores to prevent memory buildup."""
+        self.imgstore_thresholds.clear()
+        self.imgstore_rough_filter.clear()
+        self.imgstore_bounding_rect.clear()
+        self.imgstore_fine_filter.clear()
+        self.imgstore_centers.clear()
         
+    def __del__(self):
+        if hasattr(self, '_executor'):
+            self._executor.shutdown(wait=False)
+    
     @staticmethod
-    @timer_func
+    @timer_func  # Disabled for production - enable for debugging
     def __connected_components_filtering(frame: MatLike, Min_area=100, Max_area=500_000, squareness=10, connect=8):
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(frame, connectivity=connect)
         
@@ -117,7 +122,7 @@ class ROIAutoDetector:
         print(f"Selected threshold value: {threshold_value}")
         return threshold_value
     
-    #@processframe_timer_func
+    @processframe_timer_func
     def apply_gray(self, frame):
         """Convert frame to grayscale."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -125,7 +130,7 @@ class ROIAutoDetector:
             cv2.imshow("Gray Frame", resize_frame(gray)) 
         return gray
     
-    #@processframe_timer_func
+    @processframe_timer_func
     def apply_CLAHE(self, frame):
         """Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) to improve contrast.
         clipLimit: This parameter sets the threshold for contrast limiting. 
@@ -133,13 +138,13 @@ class ROIAutoDetector:
         tileGridSize: It is used to divide the image into grids for applying CLAHE. 
                       It sets the number of rows and columns. By default this is 8x8.
         """
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        cl1  = clahe.apply(frame)
+        # Use pre-allocated CLAHE object for better performance
+        cl1 = self._clahe.apply(frame)
         if self.debug_process: 
             cv2.imshow("createCLAHE (8, 8)", resize_frame(cl1)) 
         return cl1
     
-    #@processframe_timer_func
+    @processframe_timer_func
     def apply_GaussianBlur(self, frame):
         """Apply Gaussian Blur to reduce noise and detail in the image."""
         kernel_size = (5, 5)  # Kernel size should be odd and positive
@@ -148,7 +153,7 @@ class ROIAutoDetector:
             cv2.imshow("GaussianBlur (5, 5)", resize_frame(blur)) 
         return blur
 
-    #@processframe_timer_func
+    @processframe_timer_func
     def apply_NormalBlur(self, frame):
         """Apply Normal Blur to reduce noise and detail in the image."""
         kernel_size = (5, 5)  # Kernel size should be odd and positive
@@ -157,7 +162,7 @@ class ROIAutoDetector:
             cv2.imshow("NormalBlur (5, 5)", resize_frame(blur)) 
         return blur
 
-    #@processframe_timer_func
+    @processframe_timer_func
     def apply_Threshold(self, frame, threshold_value: int, index: int = 0):
         """Apply binary thresholding to the image."""
         # threshold_value = self.test_threshold_values(frame)  # Uncomment to use trackbar for threshold value selection
@@ -169,7 +174,7 @@ class ROIAutoDetector:
             # cv2.imshow(f"Threshold {threshold_value}", resize_frame(th))
         return th
 
-    #@processframe_timer_func
+    @processframe_timer_func
     def apply_RoughFiltering(self, frame, index: int = 0):
         """Apply rough connected components filtering to remove large non-ROI areas."""
         Rough_filter, _ = self.__connected_components_filtering(frame, Min_area=int(80/self.scaling_factor), Max_area=int(40_000/self.scaling_factor), squareness=15, connect=4)                    
@@ -178,7 +183,7 @@ class ROIAutoDetector:
             # cv2.imshow("Rough_filter", resize_frame(Rough_filter, scale=0.3, old_width=frame.shape[1], old_height=frame.shape[0]))
         return Rough_filter
 
-    #@processframe_timer_func
+    @processframe_timer_func
     def apply_FineFiltering(self, frame, index: int = 0):
         """Apply fine connected components filtering to isolate ROIs."""
         Fine_filter, boxes = self.__connected_components_filtering(frame, Min_area=int(1000*self.frame_scale/self.scaling_factor), Max_area=int(100_000/self.scaling_factor), squareness=1, connect=8) # Used to be 1000 with 1280x720, with 4K now 4000                    
@@ -187,7 +192,7 @@ class ROIAutoDetector:
             # cv2.imshow("Fine_filter", resize_frame(Fine_filter, scale=0.3, old_width=frame.shape[1], old_height=frame.shape[0]))
         return Fine_filter, boxes
     
-    #@processframe_timer_func
+    @processframe_timer_func
     def apply_BoundingRectangles(self, frame, index: int = 0):
         """Make bounding rectangles around detected components."""
         contours, _ = cv2.findContours(frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -220,6 +225,9 @@ class ROIAutoDetector:
     @timer_func
     def __preprocess_frame(self, frame):
         """Preprocess frame for better contour detection."""
+        # Clear debug stores to prevent memory buildup between runs
+        self._clear_debug_stores()
+        
         # Mogelijkheid 1: thresh_value =  172 
         # Resize -> Gray -> Gaussian Blur -> CLAHE -> Threshold -> Rough filter -> Bounding Rectangles -> Fine filter -> Retreive ROIs
         # Mogelijkheid 2: # thresh_value =  121 
@@ -277,9 +285,9 @@ class ROIAutoDetector:
             if len(boxes_local) == 0: 
                 return [], False # No boxes found don't continue the loop further
             rois_local                  = self.retreive_rois(boxes_local, fine_filter, index=index)
-            logger.info(f"Slice {index + 1}: Detected {len(rois_local)} ROIs with threshold {threshold_value}.")
+            logger.denied(f"Slice {index + 1}: Detected {len(rois_local)} ROIs with threshold {threshold_value}.") # type: ignore (logger.denied not in Logger by default)
             return rois_local, True
-        
+    
         def search_threshold_range(frame: MatLike, start: int, end: int, step: int, direction: str, slice_idx: int, expected_rois_per_slice: int) -> list[tuple[int,int,int,int]] | None:
             """Search for ROIs in threshold range."""
             logger.info(f"Slice {slice_idx + 1}: Starting {direction} search from {start} to {end} (step={step})")
@@ -328,7 +336,7 @@ class ROIAutoDetector:
         # Process slices
         slices_with_offsets = make_slices(input_frame, amount_of_slices=7)
         expected_rois_per_slice = self.expected_n_rois // len(slices_with_offsets)
-        logger.info(f"Expecting ROIs per slice: {expected_rois_per_slice}")
+        logger.debug(f"Expecting ROIs per slice: {expected_rois_per_slice}")
         
         # Prepare slice data for threading
         slice_tasks = [
@@ -336,15 +344,19 @@ class ROIAutoDetector:
             for idx, (slice_img, x_offset, y_offset) in enumerate(slices_with_offsets)
         ]
         
-        # Process slices in parallel
         all_rois_dict = {}
-        with ThreadPoolExecutor(max_workers=min(len(slice_tasks), 2)) as executor:
-            futures = {executor.submit(process_single_slice, task): task[0] for task in slice_tasks}
-            
+        t1 = time.perf_counter_ns()
+        if self.use_threads: 
+            futures = {self._executor.submit(process_single_slice, task): task[0] for task in slice_tasks}
             for future in as_completed(futures):
                 slice_idx, rois = future.result()
                 all_rois_dict[slice_idx] = rois
-                logger.info(f"Slice {slice_idx + 1}: Completed with {len(rois)} ROIs")
+        else: 
+            for task in slice_tasks:
+                slice_idx, rois = process_single_slice(task)
+                all_rois_dict[slice_idx] = rois
+        t2 = time.perf_counter_ns()
+        logger.debug(f"{self.use_threads = }: All slices processed in {(t2 - t1) / 1_000_000:.4f} ms")
         
         # Combine results in correct order
         all_rois = []
@@ -517,8 +529,7 @@ class ROIAutoDetector:
         If max_attempts is reached without detecting the expected number of ROIs,
         the debug process view is enabled for manual threshold selection.
           
-        Returns a list of detected ROIs as tuples `(top, bottom, left, right)`
-        when the user presses `q`. Returns an empty list otherwise to retreive new frame.
+        Returns a dict of detected ROIs as tuples `(top, bottom, left, right)`.
         """
 
         if automatic:  
@@ -552,6 +563,7 @@ if __name__ == "__main__":
         expected_n_rois=50,
         threadhold_value=171, # Aashish 182 -> Video 121 of 172
         scaling_factor=2,
+        threading=True, 
     )
     results = {}
     

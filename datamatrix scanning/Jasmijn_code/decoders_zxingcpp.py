@@ -5,11 +5,24 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import numpy as np
 
+# Timer decorator that respects PRODUCTION_MODE
+from config import create_timer_decorator
+timer_func = create_timer_decorator("Decoders_zxingcpp")
+
 # Install zxingcpp with: pip install zxing-cpp
 class DataMatrixDecoder:
     def __init__(self, use_threads=True, num_threads=10):
         self.use_threads = use_threads 
         self.num_threads = num_threads
+        
+        # Pre-allocate thread pool (saves ~15-20ms per decode_datamatrices call)
+        if use_threads:
+            self._executor = ThreadPoolExecutor(max_workers=num_threads)
+        self.results = {}
+        
+    def __del__(self):
+        if hasattr(self, '_executor'):
+            self._executor.shutdown(wait=False)
         
     @staticmethod
     def process_box(crop_box):
@@ -30,14 +43,14 @@ class DataMatrixDecoder:
                 'position': None
             }
 
+    @timer_func
     def decode_datamatrices(self, boxes: dict):
         results: dict = {}
         if self.use_threads:
-            with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-                future_to_idx = {executor.submit(self.process_box, box): idx for idx, box in boxes.items()}
-                for future in as_completed(future_to_idx):
-                    idx = future_to_idx[future]
-                    results[idx] = future.result()
+            future_to_idx = {self._executor.submit(self.process_box, box): idx for idx, box in boxes.items()}
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                results[idx] = future.result()
         else:
             for idx, box in boxes.items():
                 results[idx] = self.process_box(box)

@@ -7,6 +7,10 @@ import numpy as np
 import cv2
 from cv2.typing import MatLike
 
+# Timer decorator that respects PRODUCTION_MODE (import before other local modules)
+from config import create_timer_decorator
+timer_func = create_timer_decorator("Camera_scanner.py")
+
 # Private imports
 from feed import resize_frame
 from roi_auto_detector import ROIAutoDetector
@@ -88,6 +92,7 @@ class CameraScanner:
             
             cv2.destroyAllWindows()            
             logger.debug(f"Assigned {len(rois)} ROIs from auto-detection for profile {self.profile.name}")
+            logger.debug(f"Getting the rois took: {(time.perf_counter() - self.profile_switch_time)*1000:.3f} milliseconds since profile switch")
             return rois
 
         except Exception as e:
@@ -192,13 +197,10 @@ class CameraScanner:
         else:
             return img[:, :, :3] if img.shape[2] > 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
+    @timer_func
     def __process_frame(self, frame, DEBUG_wallet = False):
-        """Extract and processes the frame with multiple methods.
-        \nMethods: 
-            Gray_scale conversion
-            Normalization
-            Thresholding (if wallet profile)
-        """
+        """ Extract and processes the frame with multiple methods. """
+        
         ROIs_to_send_decoder = {}   
         for index, roi in self.rois.items():
             # Skip ROIs that are already successfully decoded
@@ -266,25 +268,7 @@ class CameraScanner:
                     # self.profile_switch_time = time.perf_counter()
                 else:
                     continue
-                     
-            # Check if all codes have been decoded
-            if len(self.persistent_results) >= len(self.rois):
-                self.detected_all = True
-                self.codes_retrieved = False
-                logger.debug("All ROIs have been successfully decoded.")
-                logger.warning(f"Completed in {(time.perf_counter() - self.profile_switch_time)*1000:.4f} milliseconds. \n(time between profile switch and decoded all ROI's)")
-                continue
             
-            # Check if timeout reached
-            if time.perf_counter() - self.profile_switch_time > self.profile.total_timeout:    
-                logger.critical(f"Total scan timeout of {self.profile.total_timeout} seconds reached.")
-                logger.debug("Please retreive codes or switch profile.")
-                self.timeout_reached = True
-                if self.codes_retrieved:
-                    self.detected_all = True
-                self.codes_retrieved = False
-            else:
-                self.timeout_reached = False
 
             # Display frames - Before we have results (to show ROI's)
             if self.DEBUG_show_images:
@@ -294,10 +278,7 @@ class CameraScanner:
             # Wrap the processing in a broad exception catcher so unexpected errors get logged instead of silently terminating the thread.
             try:
                 ROIs_to_send_decoder = self.__process_frame(frame) 
-                start_time = time.perf_counter()
                 self.dm_decoder.decode_datamatrices(ROIs_to_send_decoder) # Send all crops at once
-                end_time = time.perf_counter()
-                logger.debug(f"Datamatix processing time: {(end_time - start_time)*1000:.3f} milliseconds")
 
                 decoded = self.dm_decoder.get_results()
                 # If decoder returned no results or only empty strings (e.g. {1: ''}), treat as no decode and continue to next frame.
@@ -308,8 +289,26 @@ class CameraScanner:
                     decoded = dict(sorted(decoded.items()))
                     self.persistent_results |= {roi_idx: value for roi_idx, value in decoded.items() if value}
                     logger.info(f"This round decoded results: {decoded}")  
-                    self.code_detected_time = time.perf_counter()        
-                                    
+                    self.code_detected_time = time.perf_counter()
+                    
+                # Check if all codes have been decoded
+                if len(self.persistent_results) >= len(self.rois):
+                    self.detected_all = True
+                    self.codes_retrieved = False
+                    logger.debug("All ROIs have been successfully decoded.")
+                    logger.warning(f"Completed in {(time.perf_counter() - self.profile_switch_time)*1000:.4f} milliseconds. (time between profile switch and decoded all ROI's)")     
+
+                # Check if timeout reached
+                if time.perf_counter() - self.profile_switch_time > self.profile.total_timeout:    
+                    logger.critical(f"Total scan timeout of {self.profile.total_timeout} seconds reached.")
+                    logger.debug("Please retreive codes or switch profile.")
+                    self.timeout_reached = True
+                    if self.codes_retrieved:
+                        self.detected_all = True
+                    self.codes_retrieved = False
+                else:
+                    self.timeout_reached = False
+                                                
             except Exception as e:
                 logger.error(f"Exception in camera scanner main loop: {e}")
                 break
@@ -378,6 +377,7 @@ class CameraScanner:
         self.timeout_reached = False
         self.detected_all = False
         self.codes_retrieved = False
+        logger.info("Resetted the persistent results and state flags.")
         self.profile_switch_time = time.perf_counter()
 
     @staticmethod

@@ -124,6 +124,7 @@ def main():
         expected_n_rois=50,
         threadhold_value=111,
         scaling_factor=2,
+        threading=True,
     )
 
     # Set up CameraScanner
