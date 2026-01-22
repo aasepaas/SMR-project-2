@@ -61,7 +61,9 @@ CHANGE = {#error bij alle staten mogelijk om te gaan
     SMNState.SEND_GIFTBOX_COORDINATES:{#send giftbox coords mag naar scan giftbox en send wallet
         Event.SCANNING_GIFTBOX: SMNState.SCANNING_GIFTBOX,
         Event.ERROR_OCCURRED: SMNState.ERROR,
-        Event.CYCLE_COMPLETED: SMNState.DONE_CYCLE
+        Event.CYCLE_COMPLETED: SMNState.DONE_CYCLE,
+        Event.SEND_WALLET_COORDINATES: SMNState.SEND_WALLET_COORDINATES,
+        Event.IDLE: SMNState.IDLE
         },
     SMNState.SCANNING_GIFTBOX: {#scan giftbox mag naar send wallets
         Event.SWITCH_CAMERA: SMNState.SWITCH_CAMERA,
@@ -89,12 +91,17 @@ CHANGE = {#error bij alle staten mogelijk om te gaan
     },
     SMNState.ERROR: {
 
-        Event.CYCLE_COMPLETED: SMNState.DONE_CYCLE
+        Event.CYCLE_COMPLETED: SMNState.DONE_CYCLE,
+        Event.IDLE: SMNState.IDLE
+
+
 
     },
     SMNState.DONE_CYCLE: { #done cycle mag naar idle en send giftbox coords
         Event.SEND_GIFTBOX_COORDINATES: SMNState.SEND_GIFTBOX_COORDINATES,
-        Event.IDLE: SMNState.IDLE
+        Event.IDLE: SMNState.IDLE,
+        Event.ERROR_OCCURRED: SMNState.ERROR
+
     }
     }
 

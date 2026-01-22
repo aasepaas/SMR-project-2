@@ -82,7 +82,7 @@ class CameraScanner:
             A dictionary mapping ROI index to ROI box (top, bottom, left, right).
         """
         try:
-            rois = self.detector.capture_loop(frame, automatic=False)
+            rois = self.detector.capture_loop(frame, automatic=True)
             if not rois:
                 return {}  # Return dummy ROI on failure
             
@@ -459,7 +459,7 @@ class CameraScanner:
 
     # Gebruik deze methode voor het ophalen van de laatste code   
     def get_code(self) -> dict[int, str] | None:
-        if self.detected_all and not self.codes_retrieved:
+        if (self.detected_all or self.timeout_reached) and not self.codes_retrieved:
             self.codes_retrieved = True
             self.detected_all = False
             return self.persistent_results

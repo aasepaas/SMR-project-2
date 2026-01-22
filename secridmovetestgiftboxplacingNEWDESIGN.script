@@ -1,0 +1,259 @@
+#inithome
+doospickup = p[0.58202, 0.09542, 0.30634, 0.014, 2.214, 2.210]
+predoospickup = p[0.58202, 0.0, 0.30634, 0.014, 2.214, 2.210]
+postdoospickup = p[0.58202, -0.06022, 0.30634, 0.014, 2.214, 2.210]
+#midpostdoospickup = p[0.58422, 0.15191, 0.25089, 0.013, 2.502, 1.904]
+
+##+ 80.6 mm x as voor tweede doos
+xstart = 0.58922
+xnieuw1 = xstart + 0.072
+xnieuw = xstart + 0.073 * 2
+xoffsetbox = -0.03216
+doospickupxnieuw = 0.87482 + (xoffsetbox * 2 - 0.002)
+doosplacexnieuw = 0.87482 + xoffsetbox * 2
+doospickup = p[0.87482, 0.13985, 0.33166, 2.469, -2.390, -2.263]
+predoospickup = p[0.87482, 0.02985, 0.33166, 2.469, -2.390, -2.263]
+postdoospickup = p[0.87482, -0.06022, 0.33166, 2.469, -2.390, -2.263]
+
+xoffsetwallet = 0.10431
+walletpickupy = -0.17429
+walletpickupx = 0.55287
+walletpickupynieuw = walletpickupy - (0.035 * 2 - 0.001)
+walletpickupxnieuw = walletpickupx + xoffsetwallet *2
+prewalletpickup = p[0.55287,  walletpickupynieuw, 0.350, 0.000, 3.141, -0.000]
+walletpickup = p[0.55287, walletpickupynieuw, 0.20024, 0.000, 3.141, -0.000]
+posscan = p[0.76201, -0.02612, 0.32801, 0.021, 3.131, -0.177]
+postposscan = p[0.79712, -0.02612, 0.50080, 0.021, 3.131, -0.177]
+
+prewalletpickup = p[walletpickupxnieuw,  walletpickupynieuw, 0.350, 0.000, 3.141, -0.000]
+walletpickup = p[walletpickupxnieuw, walletpickupynieuw, 0.20024, 0.000, 3.141, -0.000]
+
+walletplacing1 = p[0.75741, 0.05235, 0.30632, 0.066, -3.063, -0.423]
+prewalletpickupangled = p[0.55499, -0.42618, 0.34358, 0.0, 3.131, -0.216] 
+walletpickupangled = p[0.55534, -0.44182, 0.23071, 0.0, 3.131, -0.216]
+angledyoffset = 0.03554
+angledzoffset = 4.92
+
+walletpickupanglednr3y = -0.44182 + (2 * angledyoffset)
+walletpickupanglednr3z = 0.23071 - (2 * angledzoffset)
+prewalletpickupanglednr3y = -0.42618 + (2 * angledyoffset)
+prewalletpickupanglednr3z = 0.34358 - (2 * angledzoffset)
+preprewalletpickupangled = p[0.55499, prewalletpickupanglednr3y, 0.6, 0.0, 3.131, -0.216] 
+
+prewalletpickupangled = p[0.55499, prewalletpickupanglednr3y, prewalletpickupanglednr3z, 0.0, 3.131, -0.216] 
+walletpickupangled = p[0.55534, walletpickupanglednr3y, walletpickupanglednr3z, 0.0, 3.131, -0.216]
+  
+postwalletplacing = p[0.76502, -0.06980, 0.30349, 0.037, -3.064, -0.428]
+
+pickbox = p[0.75033, -0.07908, 0.21563, 0.128, -2.759, -1.450]
+afterpickbox = p[0.75433, -0.07908, 0.51563, 0.128, -2.759, -1.450]
+postafterpickboxturn2 = p[0.75336, -0.19095, 0.32833, 0.821, 1.531, 0.899]
+postafterpickboxturn1 = p[0.75333, -0.19095, 0.32830, 1.499, 1.801, 0.926]
+postafterpickbox = p[0.75233, -0.07908, 0.51563, 2.469, -2.390, -2.263]
+finalpospre1 = p[0.87482, 0.0, 0.64613, 2.469, -2.390, -2.263]
+finalpospre2 = p[0.87482, 0.11870, 0.64613, 2.469, -2.390, -2.263]
+finalposreal = p[0.87482, 0.15701, 0.64613, 2.469, -2.390, -2.263]
+
+finalpospre1mid = p[0.78489, 0.0, 0.64613, 2.469, -2.390, -2.263]
+finalpospre2mid = p[0.78489, 0.11870, 0.64613, 2.469, -2.390, -2.263]
+finalposrealmid = p[0.78489, 0.15701, 0.64613, 2.469, -2.390, -2.263]
+
+
+posb1 = p[0.25103, -0.69603, 0.3592, 0.039, 2.287, 2.151]
+posb2 = p[0.25103, -0.69603, 0.09392, 0.039, 2.287, 2.151]
+posb3 = p[0.25103, -0.69603, 0.06292, 0.039, 2.287, 2.151]
+posb4 = p[0.25103, -0.7495, 0.06292, 0.039, 2.287, 2.151]
+posb5 = p[0.25103, -0.7495, 0.04850, 0.039, 2.287, 2.151]
+posb6 = p[0.25103, -0.69603, 0.04850, 0.039, 2.287, 2.151]
+
+doosbovenmal = p[0.74101, -0.02802, 0.30504, 0.044, -2.812, -1.422]
+doosbovenmal2 = p[0.74101, -0.02802, 0.30504, 0.384, -2.885, -1.460]
+doosbovenmal3 = p[0.73584, -0.06893, 0.26790, 0.513, -2.904, -1.470]
+
+doosinmal = p[0.74101, -0.04802, 0.24794, 0.384, -2.885, -1.460]
+doosinmal2 = p[0.73735, -0.06528, 0.22591, 0.384, -2.885, -1.460]
+
+robotnamal = p[0.74101, -0.12100, 0.22794, 0.044, -2.812, -1.422]
+
+def main():
+movej(prewalletpickup, t= 0.1)
+   set_standard_analog_out(0, 0.275)
+   sleep(2.5)
+   set_standard_digital_out(1, True)
+   sleep(0.5)
+   set_standard_digital_out(2, True)
+   set_standard_analog_out(1, 0.0)
+   
+   
+   
+   
+   sleep(0.1)
+   movel(walletpickup, t = 0.1)
+   set_standard_analog_out(0, 0.33)
+   sleep(2)
+   movel(prewalletpickup, t = 0.1)
+   movej(posscan)
+   sleep(0.2)
+
+   movej(postposscan)
+   movel(walletplacing1)
+   set_standard_analog_out(0, 0.0)
+   sleep(0.2)
+   movel(postwalletplacing)
+   set_standard_analog_out(1, 0.23) 
+   sleep(1)
+   set_standard_digital_out(2, False)
+   sleep(0.1)
+   set_standard_digital_out(1, False)
+   set_standard_analog_out(1, 0.0) 
+   set_standard_analog_out(0, 0.25)
+   sleep(2)
+   movel(pickbox, t = 0.1)
+   
+   set_standard_analog_out(0, 0.33)
+   sleep(1)
+   movel(afterpickbox, t = 0.1)
+   movel(postafterpickbox, t = 0.5)
+   movel(finalpospre1, t = 0.1)
+   movel(finalpospre2, t = 0.1)
+   set_standard_analog_out(0, 0.0)
+   sleep(1)
+   movel(finalposreal, t = 0.1)
+   movel(finalpospre1, t = 0.1)
+   movej(predoospickup, t = 0.1)
+   sleep(10000000)
+   
+   
+   sleep(9300000)
+   set_standard_analog_out(0, 0.0)
+   movel(predoospickup, t = 0.1)
+   set_standard_digital_out(0, True)
+   movel(doospickup, t = 0.5)
+   
+   movel(predoospickup, t = 0.1)
+   set_standard_analog_out(0, 0.33)
+   sleep(0.7)
+   set_standard_digital_out(0, False)
+   movel(postdoospickup)
+   #set_standard_analog_out(0, 0.0)
+
+
+
+   movel(doosbovenmal, t = 0.5)
+   movel(doosbovenmal2, t = 0.5)
+   
+   movel(doosinmal, t = 0.5)
+   sleep(0.5)
+   movel(doosinmal2)
+   #sleep(30000000)
+
+   set_standard_analog_out(0, 0.24)
+   
+   sleep(1)
+
+
+
+   movel(robotnamal, t = 1)
+   
+   set_standard_analog_out(1, 0.23)
+   movej(prewalletpickup, t= 0.1)
+   set_standard_analog_out(0, 0.29)
+   sleep(2.5)
+   set_standard_digital_out(1, True)
+   sleep(0.5)
+   set_standard_digital_out(2, True)
+   set_standard_analog_out(1, 0.0)
+   
+   
+   
+   
+   sleep(0.1)
+   movel(walletpickup, t = 0.1)
+   set_standard_analog_out(0, 0.33)
+   sleep(2)
+   movel(prewalletpickup, t = 0.1)
+   movej(posscan)
+   sleep(0.2)
+   
+   movej(postposscan)
+   movel(walletplacing1)
+   set_standard_analog_out(0, 0.0)
+   sleep(0.2)
+   movel(postwalletplacing)
+   set_standard_analog_out(1, 0.23) 
+   sleep(1)
+   set_standard_digital_out(2, False)
+   sleep(0.1)
+   set_standard_digital_out(1, False)
+   set_standard_analog_out(1, 0.0) 
+   set_standard_analog_out(0, 0.25)
+   sleep(2)
+   movel(pickbox, t = 0.1)
+   
+   set_standard_analog_out(0, 0.33)
+   sleep(1)
+   movel(afterpickbox, t = 0.1)
+   movel(postafterpickbox, t = 0.5)
+   movel(finalpospre1, t = 0.1)
+   movel(finalpospre2, t = 0.1)
+   set_standard_analog_out(0, 0.0)
+   sleep(1)
+   movel(finalposreal, t = 0.1)
+   movel(finalpospre1, t = 0.1)
+   movej(predoospickup, t = 0.1)
+   sleep(10000000)
+   
+   movel(postafterpickboxturn2)
+   sleep(1)
+   set_standard_analog_out(0, 0.0)
+   
+ 
+   sleep(3300000)
+   
+
+   set_standard_analog_out(1, 0.33)
+   sleep(1.9)
+   set_standard_digital_out(1, True)
+   set_standard_digital_out(2, True)
+   sleep(1)
+   set_standard_analog_out(1, 0.0)
+   set_standard_analog_out(0, 0.29)
+
+   movel(prewalletpickup)
+   movel(walletpickup)
+   set_standard_analog_out(0, 0.33)
+   sleep(1)
+   movel(prewalletpickup)
+   sleep(1)
+   movej(posscan)
+   sleep(0.2)
+   
+   movel(postposscan)
+   sleep(1)
+   movel(walletplacing1)
+   set_standard_analog_out(0, 0.0)
+   sleep(0.1)
+   movel(postwalletplacing)
+   set_standard_analog_out(1, 0.33) 
+   sleep(1.5)
+   set_standard_digital_out(2, False)
+   set_standard_digital_out(1, False)
+   set_standard_analog_out(1, 0.0) 
+   set_standard_analog_out(0, 0.25)
+   sleep(2)
+   movel(pickbox)
+   set_standard_analog_out(0, 0.33)
+   sleep(0.1)
+   movel(afterpickbox)
+   sleep(0.1)
+   #movel(finalpos)
+   
+   set_standard_analog_out(0, 0.0)
+
+ 
+   sleep(3300000)
+   end
+
+   
+
+main()
